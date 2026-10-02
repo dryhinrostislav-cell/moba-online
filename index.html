@@ -133,28 +133,17 @@ const SIDE_PATHS=[[{x:600,y:2200},{x:1000,y:2000},{x:1300,y:1900}],[{x:2300,y:18
 
 function lanePoint(lane,t){let tot=0;const s=[];for(let i=0;i<lane.length-1;i++){const d=Math.hypot(lane[i].x-lane[i+1].x,lane[i].y-lane[i+1].y);s.push(d);tot+=d}let g=t*tot;for(let i=0;i<s.length;i++){if(g<=s[i]){const f=s[i]?g/s[i]:0;return{x:lane[i].x+(lane[i+1].x-lane[i].x)*f,y:lane[i].y+(lane[i+1].y-lane[i].y)*f}}g-=s[i]}return{...lane[lane.length-1]}}
 
-// 20 ЛАГЕРЕЙ (было 12)
 const camps=[
-  {x:900,y:1000,r:100,kind:'small'},
-  {x:400,y:900,r:100,kind:'big'},
-  {x:2700,y:900,r:100,kind:'small'},
-  {x:3200,y:1300,r:100,kind:'big'},
-  {x:900,y:2600,r:100,kind:'small'},
-  {x:400,y:2500,r:100,kind:'big'},
-  {x:2700,y:2700,r:100,kind:'small'},
-  {x:3200,y:2700,r:100,kind:'big'},
-  {x:1800,y:700,r:100,kind:'small'},
-  {x:2200,y:2400,r:100,kind:'big'},
-  {x:1000,y:1700,r:100,kind:'small'},
-  {x:2600,y:1400,r:100,kind:'big'},
-  {x:600,y:1700,r:100,kind:'small'},
-  {x:1400,y:900,r:100,kind:'big'},
-  {x:2000,y:1500,r:100,kind:'small'},
-  {x:1400,y:2800,r:100,kind:'big'},
-  {x:2200,y:1900,r:100,kind:'small'},
-  {x:2800,y:1900,r:100,kind:'big'},
-  {x:800,y:2900,r:100,kind:'small'},
-  {x:2800,y:900,r:100,kind:'big'}
+  {x:900,y:1000,r:100,kind:'small'},{x:400,y:900,r:100,kind:'big'},
+  {x:2700,y:900,r:100,kind:'small'},{x:3200,y:1300,r:100,kind:'big'},
+  {x:900,y:2600,r:100,kind:'small'},{x:400,y:2500,r:100,kind:'big'},
+  {x:2700,y:2700,r:100,kind:'small'},{x:3200,y:2700,r:100,kind:'big'},
+  {x:1800,y:700,r:100,kind:'small'},{x:2200,y:2400,r:100,kind:'big'},
+  {x:1000,y:1700,r:100,kind:'small'},{x:2600,y:1400,r:100,kind:'big'},
+  {x:600,y:1700,r:100,kind:'small'},{x:1400,y:900,r:100,kind:'big'},
+  {x:2000,y:1500,r:100,kind:'small'},{x:1400,y:2800,r:100,kind:'big'},
+  {x:2200,y:1900,r:100,kind:'small'},{x:2800,y:1900,r:100,kind:'big'},
+  {x:800,y:2900,r:100,kind:'small'},{x:2800,y:900,r:100,kind:'big'}
 ];
 
 const NEUTRAL_ITEMS=[
@@ -218,13 +207,18 @@ function hostInit(){
   spawnWave(host.gameState);
 }
 
-// БОЛЬШЕ КРИПОВ: 4 в малом, 5 в большом
+// ИСПРАВЛЕНО: крипы спавнятся в лагере, проверяют только воду и дороги
 function spawnCamp(units,c){
   if(!isCampValid(c))return;
   const spawn=(isBig)=>{
     let x,y,ok=false,tr=0;
-    while(!ok&&tr<30){const a=Math.random()*6.28,r=c.r*.5;x=c.x+Math.cos(a)*r;y=c.y+Math.sin(a)*r;if(isForest(x,y))ok=true;tr++}
-    if(!ok)return;
+    while(!ok&&tr<30){
+      const a=Math.random()*6.28,r=c.r*(0.2+Math.random()*0.5);
+      x=c.x+Math.cos(a)*r;y=c.y+Math.sin(a)*r;
+      if(!inRiver(x,y)&&!onLane(x,y,110))ok=true;
+      tr++;
+    }
+    if(!ok){x=c.x;y=c.y}
     units.push({id:'n'+Math.random().toString(36).slice(2,9),type:'neutral',team:'neutral',x,y,dir:0,walking:false,r:isBig?24:18,hp:isBig?320:150,hpMax:isBig?320:150,speed:isBig?90:110,atkRange:isBig?85:75,atkDamage:isBig?26:14,atkCooldown:1,atkTimer:0,xpReward:isBig?70:25,goldReward:isBig?120:45,shardReward:isBig?2:1,big:isBig,campX:c.x,campY:c.y,campR:c.r,aggroId:null,aggroTimer:0,wanderAngle:Math.random()*6.28,wanderTimer:0,attackAnim:0,hurtFlash:0,deathAnim:0});
   };
   if(c.kind==='small'){spawn(false);spawn(false);spawn(false);spawn(false)}
@@ -413,12 +407,13 @@ function updateUnit(u,dt,gs){
     if(dHome>20){
       const dx=u.campX-u.x,dy=u.campY-u.y,dd=Math.hypot(dx,dy)||1;
       const nx=u.x+dx/dd*u.speed*dt,ny=u.y+dy/dd*u.speed*dt;
-      if(isForest(nx,ny)||dHome<60){u.x=nx;u.y=ny;u.dir=Math.atan2(dy,dx);u.walking=true}
+      if(!inRiver(nx,ny)&&!onLane(nx,ny,110)){u.x=nx;u.y=ny;u.dir=Math.atan2(dy,dx);u.walking=true}
+      else{u.dir=Math.atan2(dy,dx);u.walking=true}
       return;
     }
     u.wanderTimer-=dt;if(u.wanderTimer<=0){u.wanderTimer=1.5+Math.random()*2;u.wanderAngle=Math.random()*6.28}
     const nx=u.x+Math.cos(u.wanderAngle)*u.speed*.3*dt,ny=u.y+Math.sin(u.wanderAngle)*u.speed*.3*dt;
-    if(Math.hypot(nx-u.campX,ny-u.campY)<u.campR*.7&&isForest(nx,ny)){u.x=nx;u.y=ny;u.dir=u.wanderAngle;u.walking=true}
+    if(Math.hypot(nx-u.campX,ny-u.campY)<u.campR*.8&&!inRiver(nx,ny)&&!onLane(nx,ny,100)){u.x=nx;u.y=ny;u.dir=u.wanderAngle;u.walking=true}
   }
 }
 
