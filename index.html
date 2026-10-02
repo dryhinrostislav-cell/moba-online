@@ -32,11 +32,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:Ari
 #menu h1{font-size:26px;margin-bottom:8px}
 #menu p{color:#8cf;font-size:13px}
 #menu button{padding:14px 32px;font-size:16px;font-weight:bold;border:2px solid #fff;border-radius:12px;background:linear-gradient(135deg,#2a5aa8,#1a3a7a);color:#fff;min-width:230px}
-#menu input{padding:12px;font-size:18px;border-radius:8px;border:2px solid #4af;background:rgba(0,0,0,.6);color:#fff;text-align:center;min-width:280px;width:100%;letter-spacing:3px;text-transform:uppercase}
+#menu input{padding:12px;font-size:20px;border-radius:8px;border:2px solid #4af;background:rgba(0,0,0,.6);color:#fff;text-align:center;min-width:280px;width:100%;letter-spacing:6px;text-transform:uppercase;font-weight:bold}
 #roomInfo{background:rgba(0,0,0,.7);padding:16px;border-radius:12px;border:2px solid #fd0;max-width:90vw}
-#roomId{font-size:26px;color:#fd0;font-weight:bold;margin:10px 0;word-break:break-all;user-select:all;letter-spacing:3px}
+#roomId{font-size:32px;color:#fd0;font-weight:bold;margin:10px 0;word-break:break-all;user-select:all;letter-spacing:6px}
 #status{color:#8cf;font-size:13px;min-height:20px}
-#roomBadge{position:absolute;top:8px;left:50%;transform:translateX(-50%);color:#fd0;font-size:14px;background:rgba(0,0,0,.85);padding:8px 16px;border-radius:8px;z-index:999;user-select:all;letter-spacing:2px;text-align:center;border:1px solid #fd0}
+#roomBadge{position:absolute;top:8px;left:50%;transform:translateX(-50%);color:#fd0;font-size:16px;background:rgba(0,0,0,.85);padding:8px 16px;border-radius:8px;z-index:999;user-select:all;letter-spacing:4px;text-align:center;border:1px solid #fd0;font-weight:bold}
 #respawn{position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;background:rgba(120,0,0,.4);color:#fff;font-size:32px;font-weight:bold;text-shadow:2px 2px 8px #000;z-index:400;pointer-events:none;text-align:center}
 </style>
 </head>
@@ -48,13 +48,13 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:Ari
 <button id="btnCreate">🎮 Создать игру</button>
 <button id="btnJoinMode">🔗 Подключиться</button>
 <div id="joinBox" style="display:none;flex-direction:column;gap:10px;width:90vw;max-width:320px">
-<input id="hostIdInput" placeholder="Например: K3P9X" maxlength="10"/>
+<input id="hostIdInput" placeholder="ABCXYZ" maxlength="6"/>
 <button id="btnJoin">Подключиться</button>
 </div>
 <div id="roomInfo" style="display:none">
 <div style="font-size:13px;color:#8cf">Отправь этот код другу:</div>
 <div id="roomId">...</div>
-<div style="font-size:12px;color:#aaa">5 букв/цифр после MOBA-</div>
+<div style="font-size:12px;color:#aaa">6 букв</div>
 <div style="margin-top:10px;color:#8cf">⏳ Ждём игрока...</div>
 </div>
 </div>
@@ -207,7 +207,6 @@ function hostInit(){
   spawnWave(host.gameState);
 }
 
-// ИСПРАВЛЕНО: крипы спавнятся в лагере, проверяют только воду и дороги
 function spawnCamp(units,c){
   if(!isCampValid(c))return;
   const spawn=(isBig)=>{
@@ -472,11 +471,12 @@ function renderShop(){
 document.getElementById('shopBtn').addEventListener('click',()=>{document.getElementById('shopModal').style.display='block';renderShop()});
 document.getElementById('shopClose').addEventListener('click',()=>{document.getElementById('shopModal').style.display='none'});
 
+/* === КОРОТКИЕ ID БЕЗ ДЕФИСА === */
 function generateShortCode(){
-  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ';
   let s='';
-  for(let i=0;i<5;i++)s+=chars[Math.floor(Math.random()*chars.length)];
-  return 'MOBA-'+s;
+  for(let i=0;i<6;i++)s+=chars[Math.floor(Math.random()*chars.length)];
+  return s;
 }
 function tryCreatePeer(attempt){
   if(attempt>5){statusEl.textContent='Не могу создать комнату';return}
@@ -490,11 +490,11 @@ function tryCreatePeer(attempt){
     document.getElementById('roomInfo').style.display='block';
     document.getElementById('roomId').textContent=id;
     document.getElementById('roomBadgeId').textContent=id;
-    statusEl.textContent='Отправь ID другу!';
+    statusEl.textContent='✅ Готово! Отправь ID: '+id;
     hostInit();
     host.gameState.players[id]=createPlayer(id,'blue');
-    startGame();
     p.on('connection',conn=>{clientConn=conn;addConn(conn)});
+    setTimeout(()=>{startGame()},800);
   });
   p.on('error',err=>{
     if(err.type==='unavailable-id'){tryCreatePeer(attempt+1)}
@@ -522,20 +522,70 @@ document.getElementById('btnJoinMode').addEventListener('click',()=>{
   statusEl.textContent='Вставь код от друга';
 });
 
+/* === КЛИЕНТ С 4 ПОПЫТКАМИ ПОДКЛЮЧЕНИЯ === */
 document.getElementById('btnJoin').addEventListener('click',()=>{
-  let hostId=document.getElementById('hostIdInput').value.trim().toUpperCase().replace(/\s+/g,'');
+  let hostId=document.getElementById('hostIdInput').value.trim().toUpperCase().replace(/[^A-Z]/g,'');
   if(!hostId){statusEl.textContent='Пустое поле!';return}
-  if(!hostId.startsWith('MOBA-'))hostId='MOBA-'+hostId;
-  isHost=false;statusEl.textContent='Подключение к '+hostId+'...';
-  peer=new Peer(null,{debug:1});
-  peer.on('open',id=>{
-    const conn=peer.connect(hostId,{reliable:true});hostConn=conn;
-    conn.on('open',()=>{statusEl.textContent='Подключено!'});
-    conn.on('data',data=>{try{const m=JSON.parse(data);if(m.type==='welcome'){myId=m.yourId;myTeam=m.team;if(!gameStarted)startGame();statusEl.textContent='Игра началась!'}else if(m.type==='state'){remoteState=m;if(!gameStarted)startGame()}else if(m.type==='gameover'){showMsg(m.winner===myTeam?'🏆 Победа!':'💀 Поражение',m.winner===myTeam?'#4f4':'#f44',0)}}catch(e){}});
-    conn.on('error',()=>{statusEl.textContent='Ошибка соединения'});
-    conn.on('close',()=>{showMsg('Соединение потеряно','#f44',3000)});
-  });
-  peer.on('error',err=>{if(err.type==='peer-unavailable')statusEl.textContent='ID не найден';else statusEl.textContent='Ошибка: '+err.type});
+  if(hostId.length<4){statusEl.textContent='ID слишком короткий';return}
+  isHost=false;
+  statusEl.textContent='Подключение к '+hostId+'...';
+  let attempts=0;
+  const maxAttempts=4;
+
+  function attemptConnect(){
+    attempts++;
+    statusEl.textContent='Попытка '+attempts+'/'+maxAttempts+' → '+hostId;
+    const p=new Peer(null,{debug:1});
+    p.on('open',id=>{
+      setTimeout(()=>{
+        const conn=p.connect(hostId,{reliable:true});
+        hostConn=conn;
+        let opened=false;
+        const timeout=setTimeout(()=>{
+          if(!opened){
+            try{p.destroy()}catch(e){}
+            if(attempts<maxAttempts){setTimeout(attemptConnect,1500)}
+            else{statusEl.textContent='ID не найден. Проверь код и Wi-Fi'}
+          }
+        },5000);
+
+        conn.on('open',()=>{
+          opened=true;clearTimeout(timeout);peer=p;
+          statusEl.textContent='✅ Подключено!';
+        });
+        conn.on('data',data=>{
+          try{
+            const m=JSON.parse(data);
+            if(m.type==='welcome'){
+              myId=m.yourId;myTeam=m.team;
+              if(!gameStarted)startGame();
+              statusEl.textContent='Игра началась!';
+            } else if(m.type==='state'){
+              remoteState=m;
+              if(!gameStarted)startGame();
+            } else if(m.type==='gameover'){
+              showMsg(m.winner===myTeam?'🏆 Победа!':'💀 Поражение',m.winner===myTeam?'#4f4':'#f44',0);
+            }
+          }catch(e){}
+        });
+        conn.on('error',()=>{
+          clearTimeout(timeout);
+          if(!opened&&attempts<maxAttempts)setTimeout(attemptConnect,1500);
+          else statusEl.textContent='Ошибка соединения';
+        });
+        conn.on('close',()=>{showMsg('Соединение потеряно','#f44',3000)});
+      },600);
+    });
+    p.on('error',err=>{
+      if(err.type==='peer-unavailable'){
+        if(attempts<maxAttempts){setTimeout(attemptConnect,1500)}
+        else{statusEl.textContent='❌ ID не найден. Убедись что друг нажал "Создать игру"'}
+      } else {
+        statusEl.textContent='Ошибка: '+err.type;
+      }
+    });
+  }
+  attemptConnect();
 });
 
 function startGame(){
@@ -1157,4 +1207,4 @@ function mainLoop(now){
 }
 </script>
 </body>
-</html>
+  </html>
