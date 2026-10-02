@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Mini MOBA Online</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#000; font-family:'Segoe UI',Arial,sans-serif; touch-action:none; user-select:none; }
+  canvas { display:block; }
+  #joyBase { position:absolute; left:20px; bottom:20px; width:140px; height:140px; border-radius:50%; background:radial-gradient(circle, rgba(255,255,255,0.12), rgba(255,255,255,0.03)); border:2px solid rgba(255,255,255,0.3); }
+  #joyKnob { position:absolute; left:40px; top:40px; width:60px; height:60px; border-radius:50%; background:radial-gradient(circle at 35% 30%, rgba(255,255,255,0.7), rgba(180,200,255,0.35)); border:2px solid rgba(255,255,255,0.7); }
+  .btn { position:absolute; border-radius:50%; color:#fff; font-weight:bold; display:flex; align-items:center; justify-content:center; touch-action:none; text-shadow:1px 1px 3px #000; }
+  #btnAttack { right:20px; bottom:20px; width:96px; height:96px; background:radial-gradient(circle at 35% 30%, #ff7070, #b02020); border:3px solid #fff; font-size:13px; }
+  .skill { position:absolute; right:22px; width:68px; height:68px; border-radius:50%; background:radial-gradient(circle at 35% 30%, #4a4a6a, #2a2a40); border:3px solid #fff; color:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; font-weight:bold; touch-action:none; }
+  .skill .key { font-size:18px; line-height:1; }
+  .skill .lvl { font-size:10px; color:#ffd; margin-top:2px; }
+  .skill .cd { position:absolute; inset:0; border-radius:50%; background:rgba(0,0,0,0.7); display:none; align-items:center; justify-content:center; font-size:22px; }
+  .skill.locked { opacity:0.35; filter:grayscale(1); }
+  #btnQ { bottom:130px; background:radial-gradient(circle at 35% 30%, #70a8ff, #2050b0); }
+  #btnW { bottom:205px; background:radial-gradient(circle at 35% 30%, #7cff9e, #208a40); }
+  #btnE { bottom:280px; background:radial-gradient(circle at 35% 30%, #ffd960, #b08020); }
+  #btnR { bottom:355px; background:radial-gradient(circle at 35% 30%, #d470ff, #7020a0); }
+  #ui { position:absolute; top:8px; left:8px; color:#fff; font-size:12px; text-shadow:1px 1px 3px #000; pointer-events:none; background:rgba(0,0,0,0.55); padding:8px 10px; border-radius:10px; border:1px solid rgba(120,180,255,0.35); min-width:200px; }
+  #hpBarOuter { width:190px; height:14px; background:#300; border:2px solid #fff; border-radius:8px; overflow:hidden; margin-top:3px; }
+  #hpBar { height:100%; background:linear-gradient(180deg, #6f6, #0a0); transition:width .15s; }
+  #mpBarOuter { width:190px; height:10px; background:#024; border:2px solid #fff; border-radius:6px; overflow:hidden; margin-top:3px; }
+  #mpBar { height:100%; background:linear-gradient(180deg, #6cf, #08f); transition:width .15s; }
+  #xpBarOuter { width:190px; height:8px; background:#330; border:2px solid #fff; border-radius:5px; overflow:hidden; margin-top:3px; }
+  #xpBar { height:100%; background:linear-gradient(180deg, #ff0, #fa0); }
+  #killInfo { margin-top:6px; color:#ffd; line-height:1.5; font-size:12px; }
+  #msg { position:absolute; top:30%; left:50%; transform:translate(-50%,-50%); color:#fff; font-size:22px; font-weight:bold; text-shadow:2px 2px 8px #000; display:none; pointer-events:none; text-align:center; padding:12px 24px; background:rgba(0,0,0,0.75); border-radius:12px; max-width:80%; border:1px solid rgba(255,255,255,0.2); }
+  #minimap { position:absolute; top:8px; right:8px; width:120px; height:120px; background:rgba(0,0,0,0.75); border:2px solid #fff; border-radius:6px; }
+  #menu { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:radial-gradient(ellipse at center, #1a2a40, #000); color:#fff; z-index:200; padding:20px; gap:14px; text-align:center; }
+  #menu h1 { font-size:28px; margin-bottom:12px; text-shadow:0 0 20px #4af; }
+  #menu p { color:#8cf; font-size:13px; margin-bottom:8px; }
+  #menu button { padding:14px 32px; font-size:16px; font-weight:bold; border:2px solid #fff; border-radius:12px; background:linear-gradient(135deg, #2a5aa8, #1a3a7a); color:#fff; cursor:pointer; min-width:230px; box-shadow:0 4px 16px rgba(0,0,0,0.5); }
+  #menu button:hover { box-shadow:0 0 20px #4af, 0 4px 16px rgba(0,0,0,0.5); }
+  #menu input { padding:12px; font-size:16px; border-radius:8px; border:2px solid #4af; background:rgba(0,0,0,0.6); color:#fff; text-align:center; min-width:230px; }
+  #roomInfo { background:rgba(0,0,0,0.7); padding:16px; border-radius:12px; border:2px solid #fd0; }
+  #roomId { font-size:22px; color:#fd0; font-weight:bold; letter-spacing:3px; margin:6px 0; word-break:break-all; }
+  #status { color:#8cf; font-size:13px; min-height:20px; }
+  #chat { position:absolute; bottom:180px; left:8px; max-width:220px; color:#fff; font-size:12px; pointer-events:none; }
+</style>
+</head>
+<body>
+
+<div id="menu">
+  <h1>⚔️ Mini MOBA Online</h1>
+  <p>Игра 1 на 1 через интернет (P2P)</p>
+  <div id="status">Готово</div>
+  <button id="btnCreate">🎮 Создать игру</button>
+  <button id="btnJoinMode">🔗 Подключиться к игре</button>
+  <div id="joinBox" style="display:none; flex-direction:column; gap:10px;">
+    <input id="hostIdInput" placeholder="Введите ID комнаты" />
+    <button id="btnJoin">Подключиться</button>
+  </div>
+  <div id="roomInfo" style="display:none">
+    <div>Ваш ID комнаты:</div>
+    <div id="roomId">...</div>
+    <div style="font-size:12px; color:#aaa">Отправьте его другу</div>
+    <div style="margin-top:10px; color:#8cf">⏳ Ожидание игрока...</div>
+  </div>
+</div>
+
+<div id="game" style="display:none">
+  <canvas id="cv"></canvas>
+  <canvas id="minimap" width="120" height="120"></canvas>
+  <div id="ui">
+    <div>❤️ <span id="hpTxt">200/200</span></div>
+    <div id="hpBarOuter"><div id="hpBar"></div></div>
+    <div style="margin-top:3px">💧 <span id="mpTxt">100/100</span></div>
+    <div id="mpBarOuter"><div id="mpBar"></div></div>
+    <div style="margin-top:3px">⭐ Ур. <span id="lvlTxt">1</span></div>
+    <div id="xpBarOuter"><div id="xpBar"></div></div>
+    <div id="killInfo">⚔️ <span id="killsTxt">0</span> | 🏰 <span id="baseTxt">5000</span></div>
+  </div>
+  <div id="joyBase"><div id="joyKnob"></div></div>
+  <div class="btn" id="btnAttack">АТАКА</div>
+  <div class="skill" id="btnQ"><div class="key">Q</div><div class="lvl">ур.1</div><div class="cd">0</div></div>
+  <div class="skill locked" id="btnW"><div class="key">W</div><div class="lvl">ур.2</div><div class="cd">0</div></div>
+  <div class="skill locked" id="btnE"><div class="key">E</div><div class="lvl">ур.4</div><div class="cd">0</div></div>
+  <div class="skill locked" id="btnR"><div class="key">R</div><div class="lvl">ур.6</div><div class="cd">0</div></div>
+  <div id="msg"></div>
+  <div id="chat"></div>
+</div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+/* ============================================================
+   ОБЩИЕ НАСТРОЙКИ
+   ============================================================ */
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const mm = document.getElementById('minimap'), mmCtx = mm.getContext('2d');
+let W, H;
+function resize(){ if(!cv) return; W = cv.width = innerWidth; H = cv.height = innerHeight; }
+addEventListener('resize', resize); resize();
+
+const WORLD = { w: 3600, h: 3600 };
+const BASES = {
+  blue: { x: 300, y: 3300, r: 100, hp: 5000, hpMax: 5000, team: 'blue' },
+  red:  { x: 3300, y: 300, r: 100, hp: 5000, hpMax: 5000, team: 'red' }
+};
+const LANES = [
+  [{x:300,y:3300},{x:300,y:2500},{x:300,y:1700},{x:300,y:900},{x:900,y:300},{x:1600,y:300},{x:2400,y:300},{x:3300,y:300}],
+  [{x:300,y:3300},{x:900,y:2700},{x:1500,y:2100},{x:2100,y:1500},{x:2700,y:900},{x:3300,y:300}],
+  [{x:300,y:3300},{x:900,y:3300},{x:1700,y:3300},{x:2500,y:3300},{x:3300,y:2700},{x:3300,y:2000},{x:3300,y:1200},{x:3300,y:300}]
+];
+function lanePoint(lane,t){ let tot=0; const s=[]; for(let i=0;i<lane.length-1;i++){ const d=Math.hypot(lane[i].x-lane[i+1].x,lane[i].y-lane[i+1].y); s.push(d); tot+=d; } let g=t*tot; for(let i=0;i<s.length;i++){ if(g<=s[i]){ const f=s[i]?g/s[i]:0; return {x:lane[i].x+(lane[i+1].x-lane[i].x)*f, y:lane[i].y+(lane[i+1].y-lane[i].y)*f}; } g-=s[i]; } return {...lane[lane.length-1]}; }
+
+// 8 лесных лагерей
+const camps = [
+  { x:1000,y:900, r:110, kind:'small', respawnTimer:0 },
+  { x:600,y:1500, r:110, kind:'big',   respawnTimer:0 },
+  { x:2600,y:700, r:110, kind:'small', respawnTimer:0 },
+  { x:3000,y:1300,r:110, kind:'big',   respawnTimer:0 },
+  { x:1000,y:2700,r:110, kind:'small', respawnTimer:0 },
+  { x:600,y:2100, r:110, kind:'big',   respawnTimer:0 },
+  { x:2700,y:2900,r:110, kind:'small', respawnTimer:0 },
+  { x:3000,y:2100,r:110, kind:'big',   respawnTimer:0 }
+];
+
+const ABIL = {
+  Q: { cooldown: 8, mana: 25, dmg: 50, radius: 180 },
+  W: { cooldown: 15, mana: 40, heal: 100 },
+  E: { cooldown: 11, mana: 25, distance: 240 },
+  R: { cooldown: 55, mana: 100, dmg: 220, radius: 280, stun: 1.0 }
+};
+const ABIL_UNLOCK = { Q:1, W:2, E:4, R:6 };
+
+/* ============================================================
+   РЕНДЕР (общий для хоста и клиента)
+   ============================================================ */
+function drawCharacter(sx, sy, u, style){
+  ctx.save();
+  ctx.translate(sx, sy);
+  const r = u.r;
+  const walkPhase = u.walking ? (performance.now()*0.012 + (u.x + u.y)*0.05) : 0;
+  const legSwing = Math.sin(walkPhase) * r * 0.4;
+  const armSwing = Math.sin(walkPhase + Math.PI) * r * 0.35;
+
+  // Тень
+  const sg = ctx.createRadialGradient(0, r*0.95, 0, 0, r*0.95, r*1.1);
+  sg.addColorStop(0, 'rgba(0,0,0,0.5)');
+  sg.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = sg;
+  ctx.beginPath(); ctx.ellipse(0, r*0.95, r*1.1, r*0.4, 0, 0, Math.PI*2); ctx.fill();
+
+  // Ноги
+  ctx.strokeStyle = style.legs || '#222'; ctx.lineWidth = r*0.32; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-r*0.3, r*0.35); ctx.lineTo(-r*0.3 - legSwing*0.2, r*0.95); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(r*0.3, r*0.35); ctx.lineTo(r*0.3 + legSwing*0.2, r*0.95); ctx.stroke();
+
+  // Тело
+  const bg = ctx.createLinearGradient(-r*0.5, -r*0.5, r*0.5, r*0.5);
+  bg.addColorStop(0, style.bodyLight || style.body);
+  bg.addColorStop(1, style.body);
+  ctx.fillStyle = bg;
+  ctx.beginPath(); ctx.ellipse(0, 0, r*0.78, r*0.88, 0, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = style.outline || '#000'; ctx.lineWidth = 2.2;
+  ctx.beginPath(); ctx.ellipse(0, 0, r*0.78, r*0.88, 0, 0, Math.PI*2); ctx.stroke();
+
+  // Руки
+  ctx.strokeStyle = style.head; ctx.lineWidth = r*0.24;
+  ctx.beginPath(); ctx.moveTo(-r*0.72, -r*0.1); ctx.lineTo(-r*0.88 - armSwing*0.1, r*0.4); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(r*0.72, -r*0.1); ctx.lineTo(r*0.88 + armSwing*0.1, r*0.4); ctx.stroke();
+
+  // Оружие
+  if(style.weapon === 'sword'){
+    ctx.save(); ctx.translate(r*0.9, r*0.1);
+    ctx.shadowColor = '#fff'; ctx.shadowBlur = 6;
+    ctx.strokeStyle = '#e0e0f0'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(r*0.5, -r*1.2); ctx.stroke();
+    ctx.restore();
+  } else if(style.weapon === 'axe'){
+    ctx.save(); ctx.translate(r*0.9, r*0.2);
+    ctx.strokeStyle = '#6b4423'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(r*0.35, -r*1.0); ctx.stroke();
+    ctx.fillStyle = '#ddd';
+    ctx.beginPath(); ctx.moveTo(r*0.25, -r*1.0); ctx.lineTo(r*0.7, -r*1.35); ctx.lineTo(r*0.65, -r*0.7); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  } else if(style.weapon === 'club'){
+    ctx.save(); ctx.translate(r*0.85, r*0.3);
+    ctx.strokeStyle = '#6b4423'; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(r*0.5, -r*1.0); ctx.stroke();
+    ctx.fillStyle = '#4a3520';
+    ctx.beginPath(); ctx.arc(r*0.5, -r*1.0, r*0.35, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  } else if(style.weapon === 'claw'){
+    ctx.strokeStyle = '#eee'; ctx.lineWidth = 2.5;
+    for(let i=0;i<3;i++){ ctx.beginPath(); ctx.moveTo(r*0.8+i*4, r*0.2); ctx.lineTo(r*1.2+i*4, -r*0.4); ctx.stroke(); }
+  }
+
+  // Голова
+  const hg = ctx.createRadialGradient(-r*0.15, -r*1.15, 0, 0, -r*0.95, r*0.6);
+  hg.addColorStop(0, style.headLight || style.head);
+  hg.addColorStop(1, style.head);
+  ctx.fillStyle = hg;
+  ctx.beginPath(); ctx.arc(0, -r*0.95, r*0.58, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = style.outline || '#000'; ctx.lineWidth = 2; ctx.stroke();
+
+  if(style.helmet){
+    ctx.fillStyle = style.helmet;
+    ctx.beginPath(); ctx.arc(0, -r*1.12, r*0.6, Math.PI, 0); ctx.fill();
+  }
+
+  // Глаза
+  const ex = Math.cos(u.dir||0) * r*0.12;
+  const ey = Math.sin(u.dir||0) * r*0.05;
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(-r*0.2 + ex, -r*0.95 + ey, r*0.11, 0, Math.PI*2);
+  ctx.arc(r*0.2 + ex, -r*0.95 + ey, r*0.11, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.arc(-r*0.2 + ex*1.3, -r*0.95 + ey*1.3, r*0.055, 0, Math.PI*2);
+  ctx.arc(r*0.2 + ex*1.3, -r*0.95 + ey*1.3, r*0.055, 0, Math.PI*2);
+  ctx.fill();
+
+  // Подсветка своего игрока
+  if(style.isMe){
+    ctx.strokeStyle = 'rgba(120,255,180,0.6)'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(0, 0, r*1.7, 0, Math.PI*2); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawHpBar(u, sx, sy){
+  const w = u.type==='tower'?70:(u.type==='base'?160:44);
+  const h = u.type==='base'?12:6;
+  const y = sy - u.r - (u.type==='base'?32:22);
+  ctx.fillStyle = 'rgba(0,0,0,0.8)';
+  ctx.fillRect(sx-w/2-2, y-2, w+4, h+4);
+  ctx.fillStyle = '#1a0a0a';
+  ctx.fillRect(sx-w/2-1, y-1, w+2, h+2);
+  const color = u.team==='blue' ? '#3fb5ff' : (u.team==='neutral' ? '#fc4' : '#ff4a4a');
+  ctx.fillStyle = color;
+  ctx.fillRect(sx-w/2, y, w * Math.max(0, u.hp/u.hpMax), h);
+}
+
+function drawBase(b, camera){
+  const sx = b.x - camera.x, sy = b.y - camera.y;
+  if(sx<-250||sy<-250||sx>W+250||sy>H+250) return;
+  const isBlue = b.team === 'blue';
+  const light = isBlue ? '#6cb8ff' : '#ff8a6c';
+  const main  = isBlue ? '#1a5faf' : '#af1a1a';
+  const dark  = isBlue ? '#0a2a5a' : '#5a0a0a';
+
+  const halo = ctx.createRadialGradient(sx, sy, b.r*0.5, sx, sy, b.r*1.4);
+  halo.addColorStop(0, isBlue ? 'rgba(80,180,255,0.15)' : 'rgba(255,80,80,0.15)');
+  halo.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(sx, sy, b.r*1.4, 0, Math.PI*2); ctx.fill();
+
+  ctx.fillStyle = dark; ctx.beginPath(); ctx.arc(sx, sy, b.r, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = light; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(sx, sy, b.r, 0, Math.PI*2); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(sx, sy, b.r-8, 0, Math.PI*2); ctx.stroke();
+
+  const midGrad = ctx.createRadialGradient(sx-20, sy-20, 10, sx, sy, b.r*0.7);
+  midGrad.addColorStop(0, light); midGrad.addColorStop(1, main);
+  ctx.fillStyle = midGrad; ctx.beginPath(); ctx.arc(sx, sy, b.r*0.7, 0, Math.PI*2); ctx.fill();
+
+  ctx.fillStyle = light;
+  ctx.beginPath();
+  ctx.moveTo(sx-35, sy-15); ctx.lineTo(sx-25, sy-60); ctx.lineTo(sx, sy-75);
+  ctx.lineTo(sx+25, sy-60); ctx.lineTo(sx+35, sy-15);
+  ctx.lineTo(sx+20, sy+20); ctx.lineTo(sx-20, sy+20);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.stroke();
+
+  const pulse = 1 + Math.sin(performance.now()*0.003)*0.15;
+  ctx.shadowColor = '#fff'; ctx.shadowBlur = 25;
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(sx, sy-20, 10*pulse, 0, Math.PI*2); ctx.fill();
+  ctx.shadowBlur = 0;
+
+  drawHpBar(b, sx, sy);
+}
+
+function drawTower(u, camera){
+  const sx = u.x-camera.x, sy = u.y-camera.y;
+  if(sx<-100||sy<-100||sx>W+100||sy>H+100) return;
+  const isBlue = u.team === 'blue';
+  const light = isBlue ? '#6cb8ff' : '#ff8a6c';
+  const main  = isBlue ? '#1a5faf' : '#af1a1a';
+  const dark  = isBlue ? '#0a2a5a' : '#5a0a0a';
+
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.beginPath(); ctx.ellipse(sx, sy+u.r*0.9, u.r*1.1, u.r*0.45, 0, 0, Math.PI*2); ctx.fill();
+
+  ctx.fillStyle = dark; ctx.beginPath(); ctx.arc(sx, sy, u.r, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = light; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(sx, sy, u.r, 0, Math.PI*2); ctx.stroke();
+  ctx.fillStyle = main; ctx.beginPath(); ctx.arc(sx, sy, u.r*0.75, 0, Math.PI*2); ctx.fill();
+
+  ctx.fillStyle = light;
+  ctx.beginPath(); ctx.moveTo(sx-26, sy-10); ctx.lineTo(sx, sy-50); ctx.lineTo(sx+26, sy-10); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+
+  const glow = 0.6 + Math.sin(performance.now()*0.006 + u.x)*0.4;
+  ctx.shadowColor = light; ctx.shadowBlur = 20*glow;
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(sx, sy-45, 5, 0, Math.PI*2); ctx.fill();
+  ctx.shadowBlur = 0;
+
+  ctx.fillStyle = isBlue ? '#8cf' : '#fa6';
+  ctx.fillRect(sx+u.r-8, sy-u.r-22, 2, 20);
+  ctx.beginPath();
+  ctx.moveTo(sx+u.r-6, sy-u.r-22); ctx.lineTo(sx+u.r+10, sy-u.r-16); ctx.lineTo(sx+u.r-6, sy-u.r-10);
+  ctx.closePath(); ctx.fill();
+
+  drawHpBar(u, sx, sy);
+}
+
+function drawTree(t, camera){
+  const sx = t.x-camera.x, sy = t.y-camera.y;
+  if(sx<-60||sy<-60||sx>W+60||sy>H+60) return;
+  const swayX = Math.sin(performance.now()*0.001*t.swaySpeed + t.sway) * 2;
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.beginPath(); ctx.ellipse(sx+4, sy+t.r*0.7, t.r*1.0, t.r*0.4, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#2a1a08';
+  ctx.beginPath(); ctx.ellipse(sx, sy-t.r*0.1, t.r*0.45, t.r*0.55, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#4a3020';
+  ctx.beginPath(); ctx.ellipse(sx-t.r*0.1, sy-t.r*0.15, t.r*0.3, t.r*0.4, 0, 0, Math.PI*2); ctx.fill();
+  const layers = [
+    { off: 0, size: 1.0, color: '#0d2e0d' },
+    { off: -0.2, size: 0.85, color: '#153815' },
+    { off: -0.4, size: 0.7, color: '#1d5a1d' },
+    { off: -0.55, size: 0.5, color: '#2a7a2a' }
+  ];
+  for(const l of layers){
+    ctx.fillStyle = l.color;
+    ctx.beginPath(); ctx.arc(sx + swayX*(1+l.off), sy + t.r*l.off - t.r*0.4, t.r*l.size, 0, Math.PI*2); ctx.fill();
+  }
+}
+
+function drawGround(camera, trees){
+  const grd = ctx.createRadialGradient(W/2, H/2, 100, W/2, H/2, Math.max(W,H)*0.8);
+  grd.addColorStop(0, '#28432a'); grd.addColorStop(0.5, '#1e3a1e'); grd.addColorStop(1, '#122a15');
+  ctx.fillStyle = grd; ctx.fillRect(0,0,W,H);
+
+  // Река
+  ctx.save(); ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 340;
+  ctx.beginPath(); ctx.moveTo(600-camera.x, 600-camera.y); ctx.lineTo(3000-camera.x, 3000-camera.y); ctx.stroke();
+  ctx.strokeStyle = '#16314e'; ctx.lineWidth = 320;
+  ctx.beginPath(); ctx.moveTo(600-camera.x, 600-camera.y); ctx.lineTo(3000-camera.x, 3000-camera.y); ctx.stroke();
+  const rgrad = ctx.createLinearGradient(600-camera.x, 600-camera.y, 3000-camera.x, 3000-camera.y);
+  rgrad.addColorStop(0, '#2a5280'); rgrad.addColorStop(0.5, '#3a6296'); rgrad.addColorStop(1, '#2a5280');
+  ctx.strokeStyle = rgrad; ctx.lineWidth = 280;
+  ctx.beginPath(); ctx.moveTo(600-camera.x, 600-camera.y); ctx.lineTo(3000-camera.x, 3000-camera.y); ctx.stroke();
+  ctx.restore();
+
+  // Дороги
+  for(const lane of LANES){
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 100; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(lane[0].x-camera.x+4, lane[0].y-camera.y+4);
+    for(let i=1;i<lane.length;i++) ctx.lineTo(lane[i].x-camera.x+4, lane[i].y-camera.y+4);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(200,180,120,0.35)'; ctx.lineWidth = 90;
+    ctx.beginPath(); ctx.moveTo(lane[0].x-camera.x, lane[0].y-camera.y);
+    for(let i=1;i<lane.length;i++) ctx.lineTo(lane[i].x-camera.x, lane[i].y-camera.y);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(240,220,170,0.2)'; ctx.lineWidth = 55;
+    ctx.beginPath(); ctx.moveTo(lane[0].x-camera.x, lane[0].y-camera.y);
+    for(let i=1;i<lane.length;i++) ctx.lineTo(lane[i].x-camera.x, lane[i].y-camera.y);
+    ctx.stroke();
+  }
+
+  // Лагеря
+  for(const c of camps){
+    const sx=c.x-camera.x, sy=c.y-camera.y;
+    if(sx<-c.r-60||sy<-c.r-60||sx>W+c.r+60||sy>H+c.r+60) continue;
+    const cg = ctx.createRadialGradient(sx, sy, 0, sx, sy, c.r);
+    if(c.kind === 'big'){ cg.addColorStop(0, 'rgba(120,70,30,0.4)'); cg.addColorStop(1, 'rgba(90,50,20,0)'); }
+    else { cg.addColorStop(0, 'rgba(90,90,40,0.35)'); cg.addColorStop(1, 'rgba(70,80,30,0)'); }
+    ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(sx,sy,c.r,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle = c.kind === 'big' ? 'rgba(200,130,60,0.6)' : 'rgba(180,180,90,0.5)';
+    ctx.setLineDash([10,10]); ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(sx,sy,c.r,0,Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Деревья
+  for(const t of trees) drawTree(t, camera);
+}
+
+function drawMinimap(state){
+  const S = 120, sc = S/WORLD.w;
+  mmCtx.fillStyle = '#0a150a'; mmCtx.fillRect(0,0,S,S);
+  mmCtx.strokeStyle = '#2a4a7a'; mmCtx.lineWidth = 320*sc; mmCtx.lineCap='round';
+  mmCtx.beginPath(); mmCtx.moveTo(600*sc, 600*sc); mmCtx.lineTo(3000*sc, 3000*sc); mmCtx.stroke();
+  mmCtx.strokeStyle = 'rgba(190,165,110,0.45)'; mmCtx.lineWidth = 90*sc;
+  for(const lane of LANES){
+    mmCtx.beginPath(); mmCtx.moveTo(lane[0].x*sc, lane[0].y*sc);
+    for(let i=1;i<lane.length;i++) mmCtx.lineTo(lane[i].x*sc, lane[i].y*sc);
+    mmCtx.stroke();
+  }
+  for(const b of [state.bases.blue, state.bases.red]){
+    const col = b.team==='blue'?'#4af':'#f44';
+    mmCtx.shadowColor = col; mmCtx.shadowBlur = 6;
+    mmCtx.fillStyle = col; mmCtx.beginPath(); mmCtx.arc(b.x*sc, b.y*sc, 5, 0, Math.PI*2); mmCtx.fill();
+    mmCtx.shadowBlur = 0;
+  }
+  for(const u of state.units){
+    if(u.hp <= 0) continue;
+    const sx = u.x*sc, sy = u.y*sc;
+    if(u.type==='tower') mmCtx.fillStyle = u.team==='blue'?'#6af':'#f66';
+    else if(u.type==='neutral') mmCtx.fillStyle = '#fd8';
+    else mmCtx.fillStyle = u.team==='blue'?'#8cf':'#f88';
+    mmCtx.fillRect(sx-1, sy-1, 2.5, 2.5);
+  }
+  for(const p of state.players){
+    if(p.dead) continue;
+    mmCtx.fillStyle = p.team==='blue' ? '#0f0' : '#f44';
+    mmCtx.shadowColor = mmCtx.fillStyle; mmCtx.shadowBlur = 6;
+    mmCtx.beginPath(); mmCtx.arc(p.x*sc, p.y*sc, 3.5, 0, Math.PI*2); mmCtx.fill();
+    mmCtx.shadowBlur = 0;
+    if(p.isMe){
+      mmCtx.strokeStyle = '#fff'; mmCtx.lineWidth = 1.5;
+      mmCtx.beginPath(); mmCtx.arc(p.x*sc, p.y*sc, 3.5, 0, Math.PI*2); mmCtx.stroke();
+    }
+  }
+}
+
+/* ============================================================
+   РЕНДЕР состояния
+   ============================================================ */
+function renderState(state, myId){
+  const me = state.players.find(p => p.id === myId);
+  if(!me) return;
+  const camera = { x: Math.max(0, Math.min(WORLD.w-W, me.x - W/2)), y: Math.max(0, Math.min(WORLD.h-H, me.y - H/2)) };
+
+  drawGround(camera, state.trees);
+
+  // Базы
+  drawBase(state.bases.blue, camera);
+  drawBase(state.bases.red, camera);
+
+  // Юниты + игроки — сортируем по Y
+  const all = [];
+  for(const u of state.units) if(u.hp > 0) all.push({ obj:u, isPlayer:false });
+  for(const p of state.players) if(!p.dead) all.push({ obj:p, isPlayer:true });
+  all.sort((a,b)=> a.obj.y - b.obj.y);
+
+  for(const it of all){
+    const u = it.obj;
+    if(u.type === 'tower'){ drawTower(u, camera); continue; }
+    // Стиль персонажа
+    let style;
+    if(it.isPlayer){
+      const isMe = u.id === myId;
+      style = u.team === 'blue'
+        ? { body:'#2ea866', bodyLight:'#4ee68a', head:'#f0c090', legs:'#1c6a3f', weapon:'sword', isMe }
+        : { body:'#a83a3a', bodyLight:'#c85a5a', head:'#f0c090', legs:'#5a1010', weapon:'axe', isMe };
+    } else if(u.type === 'neutral'){
+      style = u.big
+        ? { body:'#6a3818', bodyLight:'#9a5828', head:'#8a5028', legs:'#3a2010', weapon:'club' }
+        : { body:'#5a7a28', bodyLight:'#7a9a3a', head:'#7a9a3a', legs:'#2a3a10', weapon:'claw' };
+    } else {
+      style = u.team === 'blue'
+        ? { body:'#2a5aa8', bodyLight:'#4a7ac8', head:'#f0c090', legs:'#102a5a', weapon:'sword', helmet:'#4a7ac8' }
+        : { body:'#a83a3a', bodyLight:'#c85a5a', head:'#f0c090', legs:'#5a1010', weapon:'axe', helmet:'#c85a5a' };
+    }
+    const sx = u.x - camera.x, sy = u.y - camera.y;
+    if(sx<-100||sy<-100||sx>W+100||sy>H+100) continue;
+    drawCharacter(sx, sy, u, style);
+    if(!it.isPlayer || !u.isMe) drawHpBar(u, sx, sy);
+  }
+
+  // Пули
+  for(const b of state.bullets){
+    const sx = b.x - camera.x, sy = b.y - camera.y;
+    ctx.fillStyle = b.color;
+    ctx.shadowColor = b.color; ctx.shadowBlur = 16;
+    ctx.beginPath(); ctx.arc(sx, sy, 5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.arc(sx, sy, 2, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  // Эффекты
+  for(const e of state.effects){
+    const sx = e.x - camera.x, sy = e.y - camera.y;
+    const alpha = Math.max(0, e.t/e.maxT);
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = e.color; ctx.lineWidth = 4;
+    ctx.shadowColor = e.color; ctx.shadowBlur = 18;
+    ctx.beginPath(); ctx.arc(sx, sy, e.r, 0, Math.PI*2); ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ============================================================
+   ХОСТ — ЛОГИКА ИГРЫ
+   ============================================================ */
+const host = {
+  active: false,
+  gameState: null,
+  trees: [],
+  broadcastTimer: 0
+};
+
+function hostInit(){
+  // Деревья
+  const rng = mulberry32(98765);
+  host.trees = [];
+  let attempts = 0;
+  while(host.trees.length < 300 && attempts < 15000){
+    attempts++;
+    const x = rng()*WORLD.w, y = rng()*WORLD.h;
+    let ok = true;
+    for(const l of LANES){ for(let j=0;j<l.length-1;j++){ if(distSeg(x,y,l[j],l[j+1]) < 170){ ok = false; break; } } if(!ok) break; }
+    if(!ok) continue;
+    if(Math.hypot(x-BASES.blue.x, y-BASES.blue.y) < 400) continue;
+    if(Math.hypot(x-BASES.red.x, y-BASES.red.y) < 400) continue;
+    if(distSeg(x,y,{x:600,y:600},{x:3000,y:3000}) < 250) continue;
+    if(camps.some(c=>Math.hypot(x-c.x, y-c.y) < c.r + 60)) continue;
+    host.trees.push({ x, y, r: 20+rng()*16, sway: rng()*Math.PI*2, swaySpeed: 0.5+rng()*0.8 });
+  }
+
+  // Юниты
+  const units = [];
+  // Башни
+  for(let li=0; li<LANES.length; li++){
+    const lane = LANES[li];
+    const b1 = lanePoint(lane, 0.2), b2 = lanePoint(lane, 0.4);
+    const r1 = lanePoint(lane, 0.6), r2 = lanePoint(lane, 0.8);
+    for(const p of [b1, b2]) units.push({ id: 'tb_'+(li)+'_'+p.x, type:'tower', team:'blue', x:p.x, y:p.y, r:28, hp:1000, hpMax:1000, atkRange:300, atkDamage:32, atkCooldown:1.15, atkTimer:0, xpReward:100, goldReward:220 });
+    for(const p of [r1, r2]) units.push({ id: 'tr_'+(li)+'_'+p.x, type:'tower', team:'red', x:p.x, y:p.y, r:28, hp:1000, hpMax:1000, atkRange:300, atkDamage:32, atkCooldown:1.15, atkTimer:0, xpReward:100, goldReward:220 });
+  }
+  // Лесные крипы
+  for(const c of camps) hostSpawnCamp(units, c);
+
+  host.gameState = {
+    players: {},
+    units,
+    bullets: [],
+    effects: [],
+    bases: {
+      blue: { x:BASES.blue.x, y:BASES.blue.y, r:BASES.blue.r, hp:5000, hpMax:5000, team:'blue' },
+      red:  { x:BASES.red.x, y:BASES.red.y, r:BASES.red.r, hp:5000, hpMax:5000, team:'red' }
+    },
+    trees: host.trees,
+    waveTimer: 6,
+    gameOver: false,
+    camps: camps.map(c => ({ ...c }))
+  };
+}
+
+function hostSpawnCamp(units, c){
+  const spawn = (isBig) => {
+    const a = Math.random()*Math.PI*2, r = c.r*0.5;
+    units.push({
+      id: 'n_'+Math.random().toString(36).slice(2,9),
+      type:'neutral', team:'neutral',
+      x: c.x + Math.cos(a)*r, y: c.y + Math.sin(a)*r, dir:0, walking:false,
+      r: isBig?22:16,
+      hp: isBig?320:150, hpMax: isBig?320:150,
+      speed: isBig?90:110,
+      atkRange: isBig?85:75, atkDamage: isBig?26:14, atkCooldown:1.0, atkTimer:0,
+      xpReward: isBig?70:25, goldReward: isBig?120:45,
+      big: isBig, campX: c.x, campY: c.y, campR: c.r,
+      aggroId: null, aggroTimer: 0,
+      wanderAngle: Math.random()*Math.PI*2, wanderTimer: 0
+    });
+  };
+  if(c.kind === 'small'){ spawn(false); spawn(false); }
+  else { spawn(true); spawn(true); spawn(false); }
+}
+
+function hostCreatePlayer(id, team){
+  const base = team === 'blue' ? BASES.blue : BASES.red;
+  return {
+    id, team,
+    x: base.x + (team==='blue'? 130 : -130),
+    y: base.y + (team==='blue'? -130 : 130),
+    r: 18, dir: team==='blue' ? -Math.PI/2 : Math.PI/2,
+    walking:false,
+    hp: 200, hpMax: 200, mp: 100, mpMax: 100,
+    speed: 240, hpRegen: 2.5, mpRegen: 6,
+    atkRange: 100, atkDamage: 22, atkCooldown: 0.75, atkTimer: 0,
+    level: 1, xp: 0, xpNext: 80, kills: 0, gold: 150,
+    dead: false, respawnTimer: 0,
+    input: { dx: 0, dy: 0 },
+    attackHeld: false,
+    abil: {
+      Q: { cd: 0, level: 1, unlocked: true },
+      W: { cd: 0, level: 0, unlocked: false },
+      E: { cd: 0, level: 0, unlocked: false },
+      R: { cd: 0, level: 0, unlocked: false }
+    }
+  };
+}
+
+function hostTick(dt){
+  const gs = host.gameState;
+  if(!gs || gs.gameOver) return;
+
+  // Игроки
+  for(const id in gs.players){
+    const p = gs.players[id];
+    if(p.dead){
+      p.respawnTimer -= dt;
+      if(p.respawnTimer <= 0){
+        const base = p.team === 'blue' ? gs.bases.blue : gs.bases.red;
+        p.dead = false; p.hp = p.hpMax; p.mp = p.mpMax;
+        p.x = base.x + (p.team==='blue'?130:-130);
+        p.y = base.y + (p.team==='blue'?-130:130);
+      }
+      continue;
+    }
+    if(Math.abs(p.input.dx)+Math.abs(p.input.dy) > 0.01){
+      p.x += p.input.dx * p.speed * dt;
+      p.y += p.input.dy * p.speed * dt;
+      p.dir = Math.atan2(p.input.dy, p.input.dx);
+      p.walking = true;
+    } else p.walking = false;
+    p.x = Math.max(p.r, Math.min(WORLD.w-p.r, p.x));
+    p.y = Math.max(p.r, Math.min(WORLD.h-p.r, p.y));
+    p.hp = Math.min(p.hpMax, p.hp + p.hpRegen*dt);
+    p.mp = Math.min(p.mpMax, p.mp + p.mpRegen*dt);
+    p.atkTimer = Math.max(0, p.atkTimer - dt);
+    for(const k of ['Q','W','E','R']) if(p.abil[k].cd > 0) p.abil[k].cd = Math.max(0, p.abil[k].cd - dt);
+    if(p.attackHeld) hostTryAttack(p);
+  }
+
+  // Юниты
+  for(const u of gs.units) hostUpdateUnit(u, dt, gs);
+  // Удалить мёртвых
+  gs.units = gs.units.filter(u => u.hp > 0);
+
+  // Респавн лагерей
+  for(const c of gs.camps){
+    const alive = gs.units.some(u => u.type === 'neutral' && Math.hypot(u.x-c.x, u.y-c.y) < c.r + 50);
+    if(!alive){
+      if(!c.respawnTimer) c.respawnTimer = 60;
+      c.respawnTimer -= dt;
+      if(c.respawnTimer <= 0){ hostSpawnCamp(gs.units, c); c.respawnTimer = 0; }
+    } else c.respawnTimer = 0;
+  }
+
+  // Волны миньонов
+  gs.waveTimer -= dt;
+  if(gs.waveTimer <= 0){ hostSpawnWave(gs); gs.waveTimer = 22; }
+
+  // Пули
+  for(let i=gs.bullets.length-1; i>=0; i--){
+    const b = gs.bullets[i];
+    b.life -= dt;
+    if(b.life <= 0){ gs.bullets.splice(i,1); continue; }
+    const tgt = hostFindById(gs, b.targetId);
+    if(!tgt || (tgt.hp !== undefined && tgt.hp <= 0) || (tgt.dead)){
+      gs.bullets.splice(i,1); continue;
+    }
+    const dx = tgt.x - b.x, dy = tgt.y - b.y;
+    const d = Math.hypot(dx, dy);
+    const step = b.speed * dt;
+    if(d - (tgt.r||0) < step){
+      hostDamage(gs, tgt, b.dmg, b.attackerId);
+      gs.bullets.splice(i,1); continue;
+    }
+    b.x += dx/d*step; b.y += dy/d*step;
+  }
+
+  // Эффекты
+  for(let i=gs.effects.length-1; i>=0; i--){
+    const e = gs.effects[i];
+    e.t -= dt;
+    e.r = e.maxR * (1 - Math.max(0, e.t)/e.maxT);
+    if(e.t <= 0) gs.effects.splice(i,1);
+  }
+}
+
+function hostFindById(gs, id){
+  if(!id) return null;
+  if(gs.players[id]) return gs.players[id];
+  if(id === 'base_blue') return gs.bases.blue;
+  if(id === 'base_red') return gs.bases.red;
+  return gs.units.find(u => u.id === id) || null;
+}
+
+function hostFindNearestEnemy(gs, from, maxDist){
+  let best = null, bestD = maxDist;
+  for(const u of gs.units){
+    if(u.hp <= 0 || u.team === from.team || u.team === 'neutral') continue;
+    const d = Math.hypot(u.x-from.x, u.y-from.y) - u.r;
+    if(d < bestD){ bestD = d; best = u; }
+  }
+  for(const id in gs.players){
+    const p = gs.players[id];
+    if(p.dead || p.team === from.team) continue;
+    const d = Math.hypot(p.x-from.x, p.y-from.y) - p.r;
+    if(d < bestD){ bestD = d; best = p; }
+  }
+  for(const b of [gs.bases.blue, gs.bases.red]){
+    if(b.team === from.team || b.hp <= 0) continue;
+    const d = Math.hypot(b.x-from.x, b.y-from.y) - b.r;
+    if(d < bestD){ bestD = d; best = b; }
+  }
+  return best;
+}
+
+function hostDamage(gs, target, dmg, attackerId){
+  if(target.hp <= 0 || (target.dead)) return;
+  target.hp -= dmg;
+  if(target.id === 'base_blue'){ if(target.hp <= 0){ target.hp = 0; gs.gameOver = true; hostEndGame('red'); } return; }
+  if(target.id === 'base_red'){ if(target.hp <= 0){ target.hp = 0; gs.gameOver = true; hostEndGame('blue'); } return; }
+  if(target.type === 'neutral' && attackerId){
+    const a = gs.players[attackerId];
+    if(a){ target.aggroId = attackerId; target.aggroTimer = 6; }
+  }
+  if(target.hp <= 0){
+    target.hp = 0;
+    const attacker = attackerId ? gs.players[attackerId] : null;
+    if(attacker && (target.team === 'red' && attacker.team === 'blue' || target.team === 'neutral')){
+      attacker.kills++;
+      attacker.gold += target.goldReward || 20;
+      attacker.xp += target.xpReward || 10;
+      while(attacker.xp >= attacker.xpNext){
+        attacker.xp -= attacker.xpNext;
+        attacker.level++;
+        attacker.xpNext = 80 + (attacker.level-1)*80;
+        attacker.hpMax += 30; attacker.hp = Math.min(attacker.hpMax, attacker.hp + 100);
+        attacker.mpMax += 12; attacker.mp = Math.min(attacker.mpMax, attacker.mp + 50);
+        attacker.atkDamage += 2.5;
+        for(const k of ['Q','W','E','R']){
+          if(!attacker.abil[k].unlocked && attacker.level >= ABIL_UNLOCK[k]){
+            attacker.abil[k].unlocked = true; attacker.abil[k].level = 1;
+            break;
+          }
+        }
+      }
+    } else if(attacker && target.team === 'blue' && attacker.team === 'red'){
+      attacker.kills++;
+      attacker.gold += target.goldReward || 20;
+      attacker.xp += target.xpReward || 10;
+    }
+  }
+}
+
+function hostTryAttack(p){
+  if(p.atkTimer > 0) return;
+  const t = hostFindNearestEnemy(host.gameState, p, p.atkRange);
+  if(!t) return;
+  p.atkTimer = p.atkCooldown;
+  const tid = t.id || (t === host.gameState.bases.blue ? 'base_blue' : t === host.gameState.bases.red ? 'base_red' : null);
+  host.gameState.bullets.push({
+    x:p.x, y:p.y, targetId: tid, dmg: p.atkDamage, attackerId: p.id,
+    speed: 560, life: 2.5,
+    color: p.team === 'blue' ? '#6cf' : '#f96'
+  });
+}
+
+function hostCast(p, key){
+  if(!p.abil[key].unlocked || p.abil[key].cd > 0) return;
+  if(p.mp < ABIL[key].mana) return;
+  p.mp -= ABIL[key].mana;
+  p.abil[key].cd = ABIL[key].cooldown;
+  const gs = host.gameState;
+  if(key === 'Q'){
+    gs.effects.push({ x:p.x, y:p.y, r:0, maxR:ABIL.Q.radius, t:0.45, maxT:0.45, color:'#8af' });
+    for(const u of gs.units){
+      if(u.hp <= 0 || u.team === p.team) continue;
+      if(Math.hypot(u.x-p.x, u.y-p.y) < ABIL.Q.radius + u.r) hostDamage(gs, u, ABIL.Q.dmg, p.id);
+    }
+    for(const id in gs.players){
+      const pl = gs.players[id];
+      if(pl.id === p.id || pl.dead || pl.team === p.team) continue;
+      if(Math.hypot(pl.x-p.x, pl.y-p.y) < ABIL.Q.radius + pl.r) hostDamage(gs, pl, ABIL.Q.dmg, p.id);
+    }
+  } else if(key === 'W'){
+    p.hp = Math.min(p.hpMax, p.hp + ABIL.W.heal);
+    gs.effects.push({ x:p.x, y:p.y, r:0, maxR:100, t:0.5, maxT:0.5, color:'#6f6' });
+  } else if(key === 'E'){
+    const dx = p.input.dx, dy = p.input.dy;
+    let nx = dx, ny = dy;
+    if(Math.hypot(nx,ny) < 0.1){ nx = 0; ny = -1; }
+    const len = Math.hypot(nx,ny);
+    nx/=len; ny/=len;
+    p.x += nx * ABIL.E.distance;
+    p.y += ny * ABIL.E.distance;
+    p.x = Math.max(p.r, Math.min(WORLD.w-p.r, p.x));
+    p.y = Math.max(p.r, Math.min(WORLD.h-p.r, p.y));
+    gs.effects.push({ x:p.x, y:p.y, r:0, maxR:60, t:0.4, maxT:0.4, color:'#fd6' });
+  } else if(key === 'R'){
+    gs.effects.push({ x:p.x, y:p.y, r:0, maxR:ABIL.R.radius, t:0.7, maxT:0.7, color:'#f8f' });
+    for(const u of gs.units){
+      if(u.hp <= 0 || u.team === p.team) continue;
+      if(Math.hypot(u.x-p.x, u.y-p.y) < ABIL.R.radius + u.r){
+        hostDamage(gs, u, ABIL.R.dmg, p.id);
+        u.stunTimer = ABIL.R.stun;
+      }
+    }
+    for(const id in gs.players){
+      const pl = gs.players[id];
+      if(pl.id === p.id || pl.dead || pl.team === p.team) continue;
+      if(Math.hypot(pl.x-p.x, pl.y-p.y) < ABIL.R.radius + pl.r){
+        hostDamage(gs, pl, ABIL.R.dmg, p.id);
+        pl.stunTimer = ABIL.R.stun;
+      }
+    }
+  }
+}
+
+function hostEndGame(winner){
+  hostBroadcast({ type: 'gameover', winner });
+  showMsg(winner === 'blue' ? '🏆 Синие победили!' : '🏆 Красные победили!', '#4f4', 0);
+}
+
+function hostSpawnWave(gs){
+  if(gs.units.filter(u => u.type === 'minion').length > 60) return;
+  for(let li=0; li<LANES.length; li++){
+    const count = 3;
+    for(let i=0;i<count;i++){
+      const a = Math.random()*Math.PI*2;
+      gs.units.push({
+        id: 'mb_'+Math.random().toString(36).slice(2,9),
+        type:'minion', team:'blue',
+        x: BASES.blue.x + Math.cos(a)*30, y: BASES.blue.y + Math.sin(a)*30,
+        dir:0, walking:false, r:14, hp:80, hpMax:80, speed:85,
+        atkRange:75, atkDamage:10, atkCooldown:0.95, atkTimer:0,
+        laneIdx: li, waypointIdx: 0, xpReward:15, goldReward:30
+      });
+      const b = Math.random()*Math.PI*2;
+      gs.units.push({
+        id: 'mr_'+Math.random().toString(36).slice(2,9),
+        type:'minion', team:'red',
+        x: BASES.red.x + Math.cos(b)*30, y: BASES.red.y + Math.sin(b)*30,
+        dir:Math.PI, walking:false, r:14, hp:80, hpMax:80, speed:85,
+        atkRange:75, atkDamage:10, atkCooldown:0.95, atkTimer:0,
+        laneIdx: li, waypointIdx: LANES[li].length-1, xpReward:15, goldReward:30
+      });
+    }
+  }
+}
+
+function hostUpdateUnit(u, dt, gs){
+  if(u.hp <= 0) return;
+  if(u.stunTimer > 0){ u.stunTimer -= dt; return; }
+  u.atkTimer = Math.max(0, u.atkTimer - dt);
+  u.walking = false;
+
+  if(u.type === 'tower'){
+    // Приоритет — миньоны
+    let target = null, bestD = Infinity, targetIsHero = false;
+    for(const x of gs.units){
+      if(x.hp <= 0 || x.team === u.team || x.team === 'neutral') continue;
+      const d = Math.hypot(x.x-u.x, x.y-u.y) - x.r;
+      if(d > u.atkRange) continue;
+      if(x.type === 'minion'){ if(d < bestD){ bestD = d; target = x; targetIsHero = false; } }
+      else if(d < bestD){ bestD = d; target = x; targetIsHero = true; }
+    }
+    if(!target){
+      for(const id in gs.players){
+        const p = gs.players[id];
+        if(p.dead || p.team === u.team) continue;
+        const d = Math.hypot(p.x-u.x, p.y-u.y) - p.r;
+        if(d <= u.atkRange && d < bestD){ bestD = d; target = p; targetIsHero = true; }
+      }
+    }
+    // Особая логика: красные башни бьют героя только если нет миньонов
+    if(u.team === 'red' && target && target.type === 'minion' === false){
+      const hasMinion = gs.units.some(x => x.type === 'minion' && x.hp > 0 && x.team === 'blue' && Math.hypot(x.x-u.x, x.y-u.y) - x.r <= u.atkRange);
+      if(hasMinion) target = null;
+    }
+    if(target){
+      u.dir = Math.atan2(target.y-u.y, target.x-u.x);
+      if(u.atkTimer <= 0){
+        u.atkTimer = u.atkCooldown;
+        const tid = target.id || (target === gs.bases.blue ? 'base_blue' : target === gs.bases.red ? 'base_red' : null);
+        gs.bullets.push({ x:u.x, y:u.y, targetId:tid, dmg:u.atkDamage, attackerId: null, speed:520, life:2.5, color: u.team==='blue'?'#6cf':'#f96' });
+      }
+    }
+    return;
+  }
+
+  if(u.type === 'minion'){
+    // Ищем врага
+    const t = hostFindNearestEnemy(gs, u, 260);
+    if(t){
+      const d = Math.hypot(t.x-u.x, t.y-u.y) - (t.r||0);
+      if(d <= u.atkRange){
+        u.dir = Math.atan2(t.y-u.y, t.x-u.x);
+        if(u.atkTimer <= 0){
+          u.atkTimer = u.atkCooldown;
+          const tid = t.id || (t === gs.bases.blue ? 'base_blue' : t === gs.bases.red ? 'base_red' : null);
+          gs.bullets.push({ x:u.x, y:u.y, targetId:tid, dmg:u.atkDamage, attackerId: null, speed:520, life:2.5, color: u.team==='blue'?'#6cf':'#f96' });
+        }
+      } else {
+        const dx = t.x-u.x, dy = t.y-u.y, dd = Math.hypot(dx,dy)||1;
+        u.x += dx/dd*u.speed*dt; u.y += dy/dd*u.speed*dt;
+        u.dir = Math.atan2(dy,dx); u.walking = true;
+      }
+      return;
+    }
+    // Идём по линии
+    const lane = LANES[u.laneIdx];
+    const dir = u.team === 'blue' ? 1 : -1;
+    let wpIdx = u.waypointIdx + dir;
+    if(wpIdx < 0 || wpIdx >= lane.length){
+      const eb = u.team === 'blue' ? gs.bases.red : gs.bases.blue;
+      const d = Math.hypot(eb.x-u.x, eb.y-u.y) - eb.r;
+      if(d <= u.atkRange){
+        u.dir = Math.atan2(eb.y-u.y, eb.x-u.x);
+        if(u.atkTimer <= 0){
+          u.atkTimer = u.atkCooldown;
+          gs.bullets.push({ x:u.x, y:u.y, targetId: u.team==='blue'?'base_red':'base_blue', dmg:u.atkDamage, attackerId:null, speed:520, life:2.5, color: u.team==='blue'?'#6cf':'#f96' });
+        }
+      } else {
+        const dx = eb.x-u.x, dy = eb.y-u.y, dd = Math.hypot(dx,dy)||1;
+        u.x += dx/dd*u.speed*dt; u.y += dy/dd*u.speed*dt;
+        u.dir = Math.atan2(dy,dx); u.walking = true;
+      }
+      return;
+    }
+    const wp = lane[wpIdx];
+    if(Math.hypot(wp.x-u.x, wp.y-u.y) < 30) u.waypointIdx = wpIdx;
+    else {
+      const dx = wp.x-u.x, dy = wp.y-u.y, dd = Math.hypot(dx,dy)||1;
+      u.x += dx/dd*u.speed*dt; u.y += dy/dd*u.speed*dt;
+      u.dir = Math.atan2(dy,dx); u.walking = true;
+    }
+    return;
+  }
+
+  if(u.type === 'neutral'){
+    if(u.aggroTimer > 0 && u.aggroId){
+      u.aggroTimer -= dt;
+      const tgt = gs.players[u.aggroId];
+      if(!tgt || tgt.dead){ u.aggroId = null; u.aggroTimer = 0; }
+      else {
+        const d = Math.hypot(tgt.x-u.x, tgt.y-u.y) - tgt.r;
+        u.dir = Math.atan2(tgt.y-u.y, tgt.x-u.x);
+        if(d <= u.atkRange){
+          if(u.atkTimer <= 0){
+            u.atkTimer = u.atkCooldown;
+            hostDamage(gs, tgt, u.atkDamage, null);
+          }
+        } else {
+          const dx = tgt.x-u.x, dy = tgt.y-u.y, dd = Math.hypot(dx,dy)||1;
+          u.x += dx/dd*u.speed*dt; u.y += dy/dd*u.speed*dt; u.walking = true;
+        }
+        if(Math.hypot(u.x-u.campX, u.y-u.campY) > 550){ u.aggroId = null; u.aggroTimer = 0; }
+        return;
+      }
+    }
+    const dHome = Math.hypot(u.x-u.campX, u.y-u.campY);
+    if(dHome > 20){
+      const dx = u.campX-u.x, dy = u.campY-u.y, dd = Math.hypot(dx,dy)||1;
+      u.x += dx/dd*u.speed*dt; u.y += dy/dd*u.speed*dt;
+      u.dir = Math.atan2(dy,dx); u.walking = true;
+      return;
+    }
+    u.wanderTimer -= dt;
+    if(u.wanderTimer <= 0){ u.wanderTimer = 1.5+Math.random()*2; u.wanderAngle = Math.random()*Math.PI*2; }
+    const nx = u.x + Math.cos(u.wanderAngle)*u.speed*0.3*dt;
+    const ny = u.y + Math.sin(u.wanderAngle)*u.speed*0.3*dt;
+    if(Math.hypot(nx-u.campX, ny-u.campY) < u.campR){
+      u.x = nx; u.y = ny; u.dir = u.wanderAngle; u.walking = true;
+    }
+  }
+}
+
+function hostBroadcast(data){
+  for(const conn of Object.values(hostConns)){
+    if(conn && conn.open){
+      try { conn.send(JSON.stringify(data)); } catch(e){}
+    }
+  }
+}
+
+function hostBroadcastState(){
+  const gs = host.gameState;
+  if(!gs) return;
+  const state = {
+    type: 'state',
+    players: Object.values(gs.players).map(p => ({
+      id: p.id, team: p.team, x: p.x, y: p.y, r: p.r, dir: p.dir, walking: p.walking,
+      hp: p.hp, hpMax: p.hpMax, mp: p.mp, mpMax: p.mpMax,
+      level: p.level, xp: p.xp, xpNext: p.xpNext, kills: p.kills, gold: p.gold,
+      dead: p.dead,
+      abil: { Q:{cd:p.abil.Q.cd, level:p.abil.Q.level, unlocked:p.abil.Q.unlocked},
+              W:{cd:p.abil.W.cd, level:p.abil.W.level, unlocked:p.abil.W.unlocked},
+              E:{cd:p.abil.E.cd, level:p.abil.E.level, unlocked:p.abil.E.unlocked},
+              R:{cd:p.abil.R.cd, level:p.abil.R.level, unlocked:p.abil.R.unlocked} }
+    })),
+    units: gs.units.map(u => ({
+      id: u.id, type: u.type, team: u.team, x: u.x, y: u.y, r: u.r, dir: u.dir, walking: u.walking,
+      hp: u.hp, hpMax: u.hpMax, big: !!u.big
+    })),
+    bullets: gs.bullets.map(b => ({ x: b.x, y: b.y, color: b.color })),
+    effects: gs.effects.map(e => ({ x: e.x, y: e.y, r: e.r, color: e.color, t: e.t, maxT: e.maxT })),
+    bases: {
+      blue: { x: gs.bases.blue.x, y: gs.bases.blue.y, r: gs.bases.blue.r, hp: gs.bases.blue.hp, hpMax: gs.bases.blue.hpMax, team: 'blue' },
+      red:  { x: gs.bases.red.x, y: gs.bases.red.y, r: gs.bases.red.r, hp: gs.bases.red.hp, hpMax: gs.bases.red.hpMax, team: 'red' }
+    },
+    trees: gs.trees
+  };
+  hostBroadcast(state);
+}
+
+/* ============================================================
+   СЕТЬ: PeerJS
+   ============================================================ */
+let peer = null;
+let isHost = false;
+let myId = null;
+let hostConns = {};   // для хоста: id → conn
+let serverConn = null; // для клиента: соединение с хостом
+let remoteState = null; // текущее состояние от хоста
+let myTeam = null;
+
+function startPeer(onOpen){
+  peer = new Peer(null, { debug: 1 });
+  peer.on('open', id => { myId = id; onOpen(id); });
+  peer.on('error', err => { console.error(err); document.getElementById('status').textContent = 'Ошибка: ' + err.type; });
+}
+
+// ---------- МЕНЮ ----------
+const statusEl = document.getElementById('status');
+document.getElementById('btnCreate').onclick = () => {
+  isHost = true;
+  statusEl.textContent = 'Создание комнаты...';
+  startPeer(id => {
+    document.getElementById('btnCreate').style.display = 'none';
+    document.getElementById('btnJoinMode').style.display = 'none';
+    document.getElementById('roomInfo').style.display = 'block';
+    document.getElementById('roomId').textContent = id;
+    statusEl.textContent = 'Готово. Ждём соперника...';
+
+    hostInit();
+
+    peer.on('connection', conn => {
+      hostConns[conn.peer] = conn;
+      conn.on('open', () => {
+        // Определяем команду: первый — red (клиент), хост — blue
+        const p = hostCreatePlayer(conn.peer, 'red');
+        host.gameState.players[conn.peer] = p;
+        // Создаём игрока-хост
+        if(!host.gameState.players[id]){
+          const ph = hostCreatePlayer(id, 'blue');
+          host.gameState.players[id] = ph;
+        }
+        conn.send(JSON.stringify({ type: 'welcome', yourId: conn.peer, team: 'red' }));
+        // Отправляем хосту его id
+        // Стартуем игру
+        startGame();
+        statusEl.textContent = 'Игра началась!';
+      });
+      conn.on('data', data => {
+        try {
+          const msg = JSON.parse(data);
+          if(msg.type === 'input'){
+            const p = host.gameState.players[conn.peer];
+            if(p){ p.input.dx = msg.dx; p.input.dy = msg.dy; }
+          } else if(msg.type === 'attack'){
+            const p = host.gameState.players[conn.peer];
+            if(p) p.attackHeld = !!msg.held;
+          } else if(msg.type === 'cast'){
+            const p = host.gameState.players[conn.peer];
+            if(p) hostCast(p, msg.key);
+          }
+        } catch(e){}
+      });
+      conn.on('close', () => { delete hostConns[conn.peer]; });
+    });
+
+    // Создаём игрока-хоста сразу
+    host.gameState.players[id] = hostCreatePlayer(id, 'blue');
+  });
+};
+
+document.getElementById('btnJoinMode').onclick = () => {
+  document.getElementById('btnCreate').style.display = 'none';
+  document.getElementById('btnJoinMode').style.display = 'none';
+  document.getElementById('joinBox').style.display = 'flex';
+  statusEl.textContent = 'Введите ID хоста';
+};
+
+document.getElementById('btnJoin').onclick = () => {
+  const hostId = document.getElementById('hostIdInput').value.trim();
+  if(!hostId){ statusEl.textContent = 'Введите ID'; return; }
+  isHost = false;
+  statusEl.textContent = 'Подключение...';
+  startPeer(id => {
+    serverConn = peer.connect(hostId);
+    serverConn.on('open', () => {
+      statusEl.textContent = 'Подключено!';
+    });
+    serverConn.on('data', data => {
+      try {
+        const msg = JSON.parse(data);
+        if(msg.type === 'welcome'){
+          myId = msg.yourId;
+          myTeam = msg.team;
+        } else if(msg.type === 'state'){
+          remoteState = msg;
+        } else if(msg.type === 'gameover'){
+          showMsg(msg.winner === myTeam ? '🏆 Победа!' : '💀 Поражение', msg.winner === myTeam ? '#4f4' : '#f44', 0);
+        }
+      } catch(e){}
+    });
+    serverConn.on('error', err => { console.error(err); });
+    serverConn.on('close', () => { showMsg('Соединение потеряно', '#f44', 3000); });
+
+    // Пока ждём welcome — показываем игру
+    startGame();
+  });
+};
+
+function startGame(){
+  document.getElementById('menu').style.display = 'none';
+  document.getElementById('game').style.display = 'block';
+  resize();
+  if(!host.loopStarted){
+    host.loopStarted = true;
+    requestAnimationFrame(mainLoop);
+  }
+}
+
+/* ============================================================
+   УПРАВЛЕНИЕ
+   ============================================================ */
+const input = { dx:0, dy:0 };
+const joyBase = document.getElementById('joyBase'), joyKnob = document.getElementById('joyKnob');
+let joyId = null;
+function setJoy(t){
+  const r = joyBase.getBoundingClientRect();
+  const cx = r.left+r.width/2, cy = r.top+r.height/2;
+  let dx = t.clientX-cx, dy = t.clientY-cy;
+  const max = r.width/2-18, len = Math.hypot(dx,dy);
+  if(len>max){ dx=dx/len*max; dy=dy/len*max; }
+  joyKnob.style.left = (r.width/2-30+dx)+'px';
+  joyKnob.style.top  = (r.height/2-30+dy)+'px';
+  input.dx = dx/max; input.dy = dy/max;
+}
+function resetJoy(){ joyKnob.style.left='40px'; joyKnob.style.top='40px'; input.dx=0; input.dy=0; }
+joyBase.addEventListener('touchstart', e=>{ e.preventDefault(); const t=e.changedTouches[0]; joyId=t.identifier; setJoy(t); }, {passive:false});
+joyBase.addEventListener('touchmove', e=>{ e.preventDefault(); for(const t of e.changedTouches) if(t.identifier===joyId) setJoy(t); }, {passive:false});
+joyBase.addEventListener('touchend', e=>{ for(const t of e.changedTouches) if(t.identifier===joyId){ joyId=null; resetJoy(); } }, {passive:false});
+joyBase.addEventListener('touchcancel', ()=>{ joyId=null; resetJoy(); });
+joyBase.addEventListener('mousedown', e=>{ joyId='mouse'; setJoy(e); });
+addEventListener('mousemove', e=>{ if(joyId==='mouse') setJoy(e); });
+addEventListener('mouseup', ()=>{ if(joyId==='mouse'){ joyId=null; resetJoy(); }});
+
+let attackHeld = false;
+const btnAtk = document.getElementById('btnAttack');
+btnAtk.addEventListener('touchstart', e=>{ e.preventDefault(); attackHeld=true; sendAttack(true); }, {passive:false});
+btnAtk.addEventListener('touchend', e=>{ e.preventDefault(); attackHeld=false; sendAttack(false); }, {passive:false});
+btnAtk.addEventListener('mousedown', ()=>{ attackHeld=true; sendAttack(true); });
+addEventListener('mouseup', ()=>{ if(attackHeld){ attackHeld=false; sendAttack(false); } });
+
+['Q','W','E','R'].forEach(k=>{
+  const el = document.getElementById('btn'+k);
+  const cast = (e)=>{ e.preventDefault(); sendCast(k); };
+  el.addEventListener('touchstart', cast, {passive:false});
+  el.addEventListener('mousedown', cast);
+});
+
+function sendInput(){
+  if(isHost){
+    const p = host.gameState && host.gameState.players[myId];
+    if(p){ p.input.dx = input.dx; p.input.dy = input.dy; }
+  } else if(serverConn && serverConn.open){
+    serverConn.send(JSON.stringify({ type:'input', dx: input.dx, dy: input.dy }));
+  }
+}
+function sendAttack(held){
+  if(isHost){
+    const p = host.gameState && host.gameState.players[myId];
+    if(p) p.attackHeld = held;
+  } else if(serverConn && serverConn.open){
+    serverConn.send(JSON.stringify({ type:'attack', held }));
+  }
+}
+function sendCast(key){
+  if(isHost){
+    const p = host.gameState && host.gameState.players[myId];
+    if(p) hostCast(p, key);
+  } else if(serverConn && serverConn.open){
+    serverConn.send(JSON.stringify({ type:'cast', key }));
+  }
+}
+
+/* ============================================================
+   UI обновление
+   ============================================================ */
+function updateUI(state, myId){
+  const me = state.players.find(p => p.id === myId);
+  if(!me) return;
+  document.getElementById('hpBar').style.width = (me.hp/me.hpMax*100)+'%';
+  document.getElementById('mpBar').style.width = (me.mp/me.mpMax*100)+'%';
+  document.getElementById('xpBar').style.width = (me.xp/me.xpNext*100)+'%';
+  document.getElementById('hpTxt').textContent = Math.ceil(me.hp)+'/'+me.hpMax;
+  document.getElementById('mpTxt').textContent = Math.ceil(me.mp)+'/'+me.mpMax;
+  document.getElementById('lvlTxt').textContent = me.level;
+  document.getElementById('killsTxt').textContent = me.kills;
+  const base = me.team === 'blue' ? state.bases.blue : state.bases.red;
+  document.getElementById('baseTxt').textContent = Math.max(0, Math.ceil(base.hp));
+
+  for(const k of ['Q','W','E','R']){
+    const el = document.getElementById('btn'+k);
+    const a = me.abil[k];
+    const cdEl = el.querySelector('.cd');
+    const lvlEl = el.querySelector('.lvl');
+    if(!a.unlocked){ el.classList.add('locked'); lvlEl.textContent = 'ур.'+ABIL_UNLOCK[k]; }
+    else { el.classList.remove('locked'); lvlEl.textContent = 'ур.'+a.level; }
+    if(a.cd > 0){ cdEl.style.display='flex'; cdEl.textContent = Math.ceil(a.cd); }
+    else cdEl.style.display='none';
+  }
+}
+
+function showMsg(text, color, duration){
+  const m = document.getElementById('msg');
+  m.textContent = text; m.style.color = color || '#fff';
+  m.style.display = 'block'; clearTimeout(m._t);
+  if(duration) m._t = setTimeout(()=> m.style.display = 'none', duration);
+}
+
+/* ============================================================
+   ГЛАВНЫЙ ЦИКЛ
+   ============================================================ */
+let lastFrame = performance.now();
+function mainLoop(now){
+  const dt = Math.min(0.05, (now - lastFrame)/1000);
+  lastFrame = now;
+
+  if(isHost && host.gameState){
+    sendInput();
+    hostTick(dt);
+    host.broadcastTimer -= dt;
+    if(host.broadcastTimer <= 0){ hostBroadcastState(); host.broadcastTimer = 1/30; }
+    // Рисуем своё состояние
+    const state = {
+      players: Object.values(host.gameState.players).map(p => ({
+        id: p.id, team: p.team, x: p.x, y: p.y, r: p.r, dir: p.dir, walking: p.walking,
+        hp: p.hp, hpMax: p.hpMax, mp: p.mp, mpMax: p.mpMax,
+        level: p.level, xp: p.xp, xpNext: p.xpNext, kills: p.kills, dead: p.dead,
+        abil: p.abil
+      })),
+      units: host.gameState.units,
+      bullets: host.gameState.bullets,
+      effects: host.gameState.effects,
+      bases: host.gameState.bases,
+      trees: host.gameState.trees
+    };
+    // Помечаем себя
+    for(const p of state.players) p.isMe = (p.id === myId);
+    renderState(state, myId);
+    updateUI(state, myId);
+    drawMinimap(state);
+  } else if(!isHost && remoteState){
+    sendInput();
+    for(const p of remoteState.players) p.isMe = (p.id === myId);
+    renderState(remoteState, myId);
+    updateUI(remoteState, myId);
+    drawMinimap(remoteState);
+  }
+
+  requestAnimationFrame(mainLoop);
+}
+
+/* ============================================================
+   УТИЛИТЫ
+   ============================================================ */
+function mulberry32(a){ return function(){ let t=a+=0x6D2B79F5; t=Math.imul(t^t>>>15,t|1); t^=t+Math.imul(t^t>>>7,t|61); return ((t^t>>>14)>>>0)/4294967296; }; }
+function distSeg(px,py,a,b){ const dx=b.x-a.x,dy=b.y-a.y,l2=dx*dx+dy*dy; let t=l2?((px-a.x)*dx+(py-a.y)*dy)/l2:0; t=Math.max(0,Math.min(1,t)); return Math.hypot(px-(a.x+t*dx),py-(a.y+t*dy)); }
+
+</script>
+</body>
+                                                                </html>
