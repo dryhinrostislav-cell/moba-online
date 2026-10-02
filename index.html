@@ -26,7 +26,7 @@
   #hpBar { height:100%; background:#0a0; }
   #mpBarOuter { width:190px; height:10px; background:#024; border:2px solid #fff; border-radius:6px; overflow:hidden; margin-top:3px; }
   #mpBar { height:100%; background:#08f; }
-  #msg { position:absolute; top:30%; left:50%; transform:translate(-50%,-50%); color:#fff; font-size:22px; font-weight:bold; text-shadow:2px 2px 8px #000; display:none; text-align:center; padding:12px 24px; background:rgba(0,0,0,0.8); border-radius:12px; }
+  #msg { position:absolute; top:30%; left:50%; transform:translate(-50%,-50%); color:#fff; font-size:22px; font-weight:bold; text-shadow:2px 2px 8px #000; display:none; text-align:center; padding:12px 24px; background:rgba(0,0,0,0.8); border-radius:12px; z-index:500; }
   #minimap { position:absolute; top:8px; right:8px; width:120px; height:120px; background:rgba(0,0,0,0.75); border:2px solid #fff; border-radius:6px; }
   #menu { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:radial-gradient(ellipse at center, #1a2a40, #000); color:#fff; z-index:200; padding:20px; gap:14px; text-align:center; }
   #menu h1 { font-size:26px; margin-bottom:8px; }
@@ -36,6 +36,7 @@
   #roomInfo { background:rgba(0,0,0,0.7); padding:16px; border-radius:12px; border:2px solid #fd0; max-width:90vw; }
   #roomId { font-size:14px; color:#fd0; font-weight:bold; margin:6px 0; word-break:break-all; user-select:all; }
   #status { color:#8cf; font-size:13px; min-height:20px; }
+  #roomBadge { position:absolute; top:8px; left:50%; transform:translateX(-50%); color:#fd0; font-size:12px; background:rgba(0,0,0,0.85); padding:8px 14px; border-radius:8px; z-index:999; user-select:all; max-width:60vw; word-break:break-all; text-align:center; border:1px solid #fd0; }
 </style>
 </head>
 <body>
@@ -59,6 +60,7 @@
 </div>
 
 <div id="game" style="display:none">
+  <div id="roomBadge">🔑 ID: <span id="roomBadgeId">...</span></div>
   <canvas id="cv"></canvas>
   <canvas id="minimap" width="120" height="120"></canvas>
   <div id="ui">
@@ -144,7 +146,6 @@ function hostInit(){
     if(camps.some(c=>Math.hypot(x-c.x, y-c.y) < c.r + 60)) continue;
     host.trees.push({ x, y, r: 20+rng()*16, sway: rng()*Math.PI*2, swaySpeed: 0.5+rng()*0.8 });
   }
-
   const units = [];
   for(let li=0; li<LANES.length; li++){
     const lane = LANES[li];
@@ -154,7 +155,6 @@ function hostInit(){
     for(const p of [r1, r2]) units.push({ id:'tr'+li+Math.random().toString(36).slice(2,6), type:'tower', team:'red', x:p.x, y:p.y, r:28, hp:1000, hpMax:1000, atkRange:300, atkDamage:32, atkCooldown:1.15, atkTimer:0, xpReward:100, goldReward:220 });
   }
   for(const c of camps) hostSpawnCamp(units, c);
-
   host.gameState = {
     players: {}, units, bullets: [], effects: [],
     bases: {
@@ -164,7 +164,6 @@ function hostInit(){
     trees: host.trees, waveTimer: 6, gameOver: false,
     camps: camps.map(c => ({ ...c, respawnTimer: 0 }))
   };
-  log('Хост инициализирован');
 }
 
 function hostSpawnCamp(units, c){
@@ -564,31 +563,28 @@ function hostBroadcastState(){
 document.getElementById('btnCreate').onclick = () => {
   isHost = true;
   statusEl.textContent = 'Создание комнаты...';
-  log('Создаём Peer...');
   peer = new Peer(null, { debug: 1 });
   peer.on('open', id => {
     myId = id; myTeam = 'blue';
-    log('Peer открыт, мой ID:', id);
     document.getElementById('btnCreate').style.display = 'none';
     document.getElementById('btnJoinMode').style.display = 'none';
     document.getElementById('roomInfo').style.display = 'block';
     document.getElementById('roomId').textContent = id;
+    document.getElementById('roomBadgeId').textContent = id;
     statusEl.textContent = 'Отправь ID другу. Игра запущена!';
     hostInit();
     host.gameState.players[id] = hostCreatePlayer(id, 'blue');
     startGame();
     peer.on('connection', conn => {
-      log('Клиент подключается:', conn.peer);
       clientConn = conn;
       hostConnsAdd(conn);
     });
   });
-  peer.on('error', err => { log('Peer error:', err); statusEl.textContent = 'Ошибка: ' + err.type; });
+  peer.on('error', err => { statusEl.textContent = 'Ошибка: ' + err.type; });
 };
 
 function hostConnsAdd(conn){
   const handleOpen = () => {
-    log('Соединение открыто с', conn.peer);
     if(!host.gameState.players[conn.peer]) host.gameState.players[conn.peer] = hostCreatePlayer(conn.peer, 'red');
     conn.send(JSON.stringify({ type:'welcome', yourId: conn.peer, team:'red' }));
     showMsg('🔗 Игрок подключился!', '#4f4', 2000);
@@ -603,10 +599,9 @@ function hostConnsAdd(conn){
       if(msg.type === 'input'){ p.input.dx = msg.dx; p.input.dy = msg.dy; }
       else if(msg.type === 'attack'){ p.attackHeld = !!msg.held; }
       else if(msg.type === 'cast'){ hostCast(p, msg.key); }
-    } catch(e){ log('data err', e); }
+    } catch(e){}
   });
   conn.on('close', () => {
-    log('Соединение закрыто:', conn.peer);
     if(host.gameState && host.gameState.players[conn.peer]) delete host.gameState.players[conn.peer];
     clientConn = null;
   });
@@ -624,14 +619,11 @@ document.getElementById('btnJoin').onclick = () => {
   if(!hostId){ statusEl.textContent = 'Пустое поле!'; return; }
   isHost = false;
   statusEl.textContent = 'Подключение к ' + hostId + '...';
-  log('Подключаемся к', hostId);
   peer = new Peer(null, { debug: 1 });
   peer.on('open', id => {
-    log('Мой ID:', id);
     const conn = peer.connect(hostId, { reliable: true });
     hostConn = conn;
     conn.on('open', () => {
-      log('Соединение установлено');
       statusEl.textContent = 'Подключено! Ждём данные...';
       conn.send(JSON.stringify({ type:'input', dx:0, dy:0 }));
     });
@@ -640,7 +632,6 @@ document.getElementById('btnJoin').onclick = () => {
         const msg = JSON.parse(data);
         if(msg.type === 'welcome'){
           myId = msg.yourId; myTeam = msg.team;
-          log('Добро пожаловать! Мой ID:', myId, 'Команда:', myTeam);
           if(!gameStarted) startGame();
           statusEl.textContent = 'Игра началась!';
         } else if(msg.type === 'state'){
@@ -649,13 +640,12 @@ document.getElementById('btnJoin').onclick = () => {
         } else if(msg.type === 'gameover'){
           showMsg(msg.winner === myTeam ? '🏆 Победа!' : '💀 Поражение', msg.winner === myTeam ? '#4f4' : '#f44', 0);
         }
-      } catch(e){ log('data err', e); }
+      } catch(e){}
     });
-    conn.on('error', err => { log('Conn error:', err); statusEl.textContent = 'Ошибка соединения'; });
-    conn.on('close', () => { log('Соединение потеряно'); showMsg('Соединение потеряно', '#f44', 3000); });
+    conn.on('error', () => { statusEl.textContent = 'Ошибка соединения'; });
+    conn.on('close', () => { showMsg('Соединение потеряно', '#f44', 3000); });
   });
   peer.on('error', err => {
-    log('Peer error:', err);
     if(err.type === 'peer-unavailable'){ statusEl.textContent = 'Неверный ID или хост офлайн'; }
     else { statusEl.textContent = 'Ошибка: ' + err.type; }
   });
@@ -664,7 +654,6 @@ document.getElementById('btnJoin').onclick = () => {
 function startGame(){
   if(gameStarted) return;
   gameStarted = true;
-  log('Игра запущена');
   document.getElementById('menu').style.display = 'none';
   document.getElementById('game').style.display = 'block';
   resize();
