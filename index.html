@@ -207,6 +207,7 @@ function hostInit(){
   spawnWave(host.gameState);
 }
 
+// === КРИПОВ СТАЛО МЕНЬШЕ: 2 в малом, 3 в большом ===
 function spawnCamp(units,c){
   if(!isCampValid(c))return;
   const spawn=(isBig)=>{
@@ -218,15 +219,16 @@ function spawnCamp(units,c){
       tr++;
     }
     if(!ok){x=c.x;y=c.y}
-    units.push({id:'n'+Math.random().toString(36).slice(2,9),type:'neutral',team:'neutral',x,y,dir:0,walking:false,r:isBig?24:18,hp:isBig?320:150,hpMax:isBig?320:150,speed:isBig?90:110,atkRange:isBig?85:75,atkDamage:isBig?26:14,atkCooldown:1,atkTimer:0,xpReward:isBig?70:25,goldReward:isBig?120:45,shardReward:isBig?2:1,big:isBig,campX:c.x,campY:c.y,campR:c.r,aggroId:null,aggroTimer:0,wanderAngle:Math.random()*6.28,wanderTimer:0,attackAnim:0,hurtFlash:0,deathAnim:0});
+    units.push({id:'n'+Math.random().toString(36).slice(2,9),type:'neutral',team:'neutral',x,y,dir:0,walking:false,r:isBig?24:18,hp:isBig?320:150,hpMax:isBig?320:150,speed:isBig?90:110,atkRange:isBig?85:75,atkDamage:isBig?26:14,atkCooldown:1,atkTimer:0,xpReward:isBig?70:25,goldReward:0,shardReward:isBig?2:1,big:isBig,campX:c.x,campY:c.y,campR:c.r,aggroId:null,aggroTimer:0,wanderAngle:Math.random()*6.28,wanderTimer:0,attackAnim:0,hurtFlash:0,deathAnim:0});
   };
-  if(c.kind==='small'){spawn(false);spawn(false);spawn(false);spawn(false)}
-  else{spawn(true);spawn(true);spawn(true);spawn(false);spawn(false)}
+  if(c.kind==='small'){spawn(false);spawn(false)}
+  else{spawn(true);spawn(true);spawn(false)}
 }
 
+// === ЗОЛОТО УБРАНО ===
 function createPlayer(id,team){
   const base=team==='blue'?BASES.blue:BASES.red;
-  return {id,team,x:base.x+(team==='blue'?150:-150),y:base.y+(team==='blue'?-250:250),r:20,dir:team==='blue'?-Math.PI/2:Math.PI/2,walking:false,hp:200,hpMax:200,mp:100,mpMax:100,speed:240,hpRegen:2.5,mpRegen:6,atkRange:170,atkDamage:22,atkCooldown:.75,atkTimer:0,level:1,xp:0,xpNext:80,kills:0,gold:150,shards:0,inventory:[],spellCdMul:1,dead:false,respawnTimer:0,input:{dx:0,dy:0},attackHeld:false,attackAnim:0,hurtFlash:0,castAnim:0,abil:{Q:{cd:0,level:1,unlocked:true},W:{cd:0,level:0,unlocked:false},E:{cd:0,level:0,unlocked:false},R:{cd:0,level:0,unlocked:false}}};
+  return {id,team,x:base.x+(team==='blue'?150:-150),y:base.y+(team==='blue'?-250:250),r:20,dir:team==='blue'?-Math.PI/2:Math.PI/2,walking:false,hp:200,hpMax:200,mp:100,mpMax:100,speed:240,hpRegen:2.5,mpRegen:6,atkRange:170,atkDamage:22,atkCooldown:.75,atkTimer:0,level:1,xp:0,xpNext:80,kills:0,shards:0,inventory:[],spellCdMul:1,dead:false,respawnTimer:0,input:{dx:0,dy:0},attackHeld:false,attackAnim:0,hurtFlash:0,castAnim:0,abil:{Q:{cd:0,level:1,unlocked:true},W:{cd:0,level:0,unlocked:false},E:{cd:0,level:0,unlocked:false},R:{cd:0,level:0,unlocked:false}}};
 }
 
 function hostTick(dt){
@@ -294,6 +296,7 @@ function findNearestEnemy(gs,from,maxDist,allowNeutral){
   return best;
 }
 
+// === ЗОЛОТО УБРАНО ИЗ НАГРАД ===
 function hostDamage(gs,target,dmg,attackerId){
   if(target.hp<=0||target.dead)return;
   target.hp-=dmg;target.hurtFlash=.15;
@@ -306,12 +309,17 @@ function hostDamage(gs,target,dmg,attackerId){
       target.dead=true;target.respawnTimer=6;target.input.dx=0;target.input.dy=0;target.attackHeld=false;
       if(target.id===myId)playSound('death');
       const killer=attackerId?gs.players[attackerId]:null;
-      if(killer&&killer.id!==target.id){killer.kills++;killer.gold+=300;if(killer.id===myId)playSound('hit');gs.floatTexts.push({x:target.x,y:target.y-30,text:'+300💰',color:'#fd0',t:1.5,maxT:1.5});gainXP(killer,200)}
+      if(killer&&killer.id!==target.id){
+        killer.kills++;
+        if(killer.id===myId)playSound('hit');
+        gs.floatTexts.push({x:target.x,y:target.y-30,text:'+200 XP',color:'#8cf',t:1.5,maxT:1.5});
+        gainXP(killer,200);
+      }
       return;
     }
     const attacker=attackerId?gs.players[attackerId]:null;
     if(attacker&&target.team!==attacker.team){
-      attacker.kills++;attacker.gold+=target.goldReward||20;
+      attacker.kills++;
       if(target.type==='neutral'){const shards=target.shardReward||1;attacker.shards=(attacker.shards||0)+shards;for(let i=0;i<shards;i++)gs.shardDrops.push({x:target.x+(Math.random()-.5)*20,y:target.y,toId:attacker.id,t:1.5})}
       gainXP(attacker,target.xpReward||10);
     }
@@ -471,7 +479,6 @@ function renderShop(){
 document.getElementById('shopBtn').addEventListener('click',()=>{document.getElementById('shopModal').style.display='block';renderShop()});
 document.getElementById('shopClose').addEventListener('click',()=>{document.getElementById('shopModal').style.display='none'});
 
-/* === КОРОТКИЕ ID БЕЗ ДЕФИСА === */
 function generateShortCode(){
   const chars='ABCDEFGHJKLMNPQRSTUVWXYZ';
   let s='';
@@ -522,7 +529,6 @@ document.getElementById('btnJoinMode').addEventListener('click',()=>{
   statusEl.textContent='Вставь код от друга';
 });
 
-/* === КЛИЕНТ С 4 ПОПЫТКАМИ ПОДКЛЮЧЕНИЯ === */
 document.getElementById('btnJoin').addEventListener('click',()=>{
   let hostId=document.getElementById('hostIdInput').value.trim().toUpperCase().replace(/[^A-Z]/g,'');
   if(!hostId){statusEl.textContent='Пустое поле!';return}
@@ -1207,4 +1213,4 @@ function mainLoop(now){
 }
 </script>
 </body>
-  </html>
+</html>
