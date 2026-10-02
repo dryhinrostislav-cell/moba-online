@@ -8,7 +8,6 @@
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:Arial;touch-action:none;user-select:none}
 #cv{display:block;width:100%;height:100%}
-#minimap{display:block}
 #joyBase{position:absolute;left:20px;bottom:20px;width:140px;height:140px;border-radius:50%;background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.3)}
 #joyKnob{position:absolute;left:40px;top:40px;width:60px;height:60px;border-radius:50%;background:rgba(255,255,255,.5);border:2px solid #fff}
 .btn{position:absolute;border-radius:50%;color:#fff;font-weight:bold;display:flex;align-items:center;justify-content:center;touch-action:none;text-shadow:1px 1px 3px #000}
@@ -33,11 +32,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:Ari
 #menu h1{font-size:26px;margin-bottom:8px}
 #menu p{color:#8cf;font-size:13px}
 #menu button{padding:14px 32px;font-size:16px;font-weight:bold;border:2px solid #fff;border-radius:12px;background:linear-gradient(135deg,#2a5aa8,#1a3a7a);color:#fff;min-width:230px}
-#menu input{padding:12px;font-size:14px;border-radius:8px;border:2px solid #4af;background:rgba(0,0,0,.6);color:#fff;text-align:center;min-width:280px;width:100%}
+#menu input{padding:12px;font-size:18px;border-radius:8px;border:2px solid #4af;background:rgba(0,0,0,.6);color:#fff;text-align:center;min-width:280px;width:100%;letter-spacing:3px;text-transform:uppercase}
 #roomInfo{background:rgba(0,0,0,.7);padding:16px;border-radius:12px;border:2px solid #fd0;max-width:90vw}
-#roomId{font-size:14px;color:#fd0;font-weight:bold;margin:6px 0;word-break:break-all;user-select:all}
+#roomId{font-size:26px;color:#fd0;font-weight:bold;margin:10px 0;word-break:break-all;user-select:all;letter-spacing:3px}
 #status{color:#8cf;font-size:13px;min-height:20px}
-#roomBadge{position:absolute;top:8px;left:50%;transform:translateX(-50%);color:#fd0;font-size:12px;background:rgba(0,0,0,.85);padding:8px 14px;border-radius:8px;z-index:999;user-select:all;max-width:60vw;word-break:break-all;text-align:center;border:1px solid #fd0}
+#roomBadge{position:absolute;top:8px;left:50%;transform:translateX(-50%);color:#fd0;font-size:14px;background:rgba(0,0,0,.85);padding:8px 16px;border-radius:8px;z-index:999;user-select:all;letter-spacing:2px;text-align:center;border:1px solid #fd0}
 #respawn{position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;background:rgba(120,0,0,.4);color:#fff;font-size:32px;font-weight:bold;text-shadow:2px 2px 8px #000;z-index:400;pointer-events:none;text-align:center}
 </style>
 </head>
@@ -49,19 +48,19 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:Ari
 <button id="btnCreate">🎮 Создать игру</button>
 <button id="btnJoinMode">🔗 Подключиться</button>
 <div id="joinBox" style="display:none;flex-direction:column;gap:10px;width:90vw;max-width:320px">
-<input id="hostIdInput" placeholder="Вставь ID"/>
+<input id="hostIdInput" placeholder="Например: K3P9X" maxlength="10"/>
 <button id="btnJoin">Подключиться</button>
 </div>
 <div id="roomInfo" style="display:none">
-<div>Твой ID:</div>
+<div style="font-size:13px;color:#8cf">Отправь этот код другу:</div>
 <div id="roomId">...</div>
-<div style="font-size:12px;color:#aaa">Отправь другу</div>
-<div style="margin-top:10px;color:#8cf">⏳ Ждём...</div>
+<div style="font-size:12px;color:#aaa">Просто 5 букв/цифр после MOBA-</div>
+<div style="margin-top:10px;color:#8cf">⏳ Ждём игрока...</div>
 </div>
 </div>
 
 <div id="game" style="display:none">
-<div id="roomBadge">🔑 ID: <span id="roomBadgeId">...</span></div>
+<div id="roomBadge">🔑 <span id="roomBadgeId">...</span></div>
 <canvas id="cv"></canvas>
 <canvas id="minimap" width="120" height="120"></canvas>
 <div id="ui">
@@ -97,7 +96,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:Ari
 const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
 const mm=document.getElementById('minimap'),mmCtx=mm.getContext('2d');
 let W,H;
-const ZOOM=0.55;
+const ZOOM=0.85;
 function resize(){
   if(!cv)return;
   W=Math.floor(innerWidth/ZOOM);
@@ -196,7 +195,6 @@ function hostInit(){
   }
   for(const c of camps)spawnCamp(units,c);
   host.gameState={players:{},units,bullets:[],effects:[],bases:{blue:{x:BASES.blue.x,y:BASES.blue.y,r:BASES.blue.r,hp:5000,hpMax:5000,team:'blue',id:'base_blue'},red:{x:BASES.red.x,y:BASES.red.y,r:BASES.red.r,hp:5000,hpMax:5000,team:'red',id:'base_red'}},trees:host.trees,decorations:host.decorations,waveTimer:20,gameOver:false,camps:camps.map(c=>({...c,respawnTimer:0})),shardDrops:[],floatTexts:[],couriers:[]};
-  // === НАЧАЛЬНАЯ ВОЛНА КРИПОВ ===
   spawnWave(host.gameState);
   spawnWave(host.gameState);
 }
@@ -433,23 +431,39 @@ function renderShop(){
 document.getElementById('shopBtn').addEventListener('click',()=>{document.getElementById('shopModal').style.display='block';renderShop()});
 document.getElementById('shopClose').addEventListener('click',()=>{document.getElementById('shopModal').style.display='none'});
 
-document.getElementById('btnCreate').addEventListener('click',()=>{
-  initAudio();isHost=true;statusEl.textContent='Создание...';
-  peer=new Peer(null,{debug:1});
-  peer.on('open',id=>{
-    myId=id;myTeam='blue';
+/* ==================== КОРОТКИЕ ID ==================== */
+function generateShortCode(){
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let s='';
+  for(let i=0;i<5;i++)s+=chars[Math.floor(Math.random()*chars.length)];
+  return 'MOBA-'+s;
+}
+function tryCreatePeer(attempt){
+  if(attempt>5){statusEl.textContent='Не могу создать комнату. Попробуй позже.';return}
+  statusEl.textContent='Создание комнаты... ('+(attempt+1)+')';
+  const code=generateShortCode();
+  const p=new Peer(code,{debug:1});
+  p.on('open',id=>{
+    peer=p;myId=id;myTeam='blue';
     document.getElementById('btnCreate').style.display='none';
     document.getElementById('btnJoinMode').style.display='none';
     document.getElementById('roomInfo').style.display='block';
     document.getElementById('roomId').textContent=id;
     document.getElementById('roomBadgeId').textContent=id;
-    statusEl.textContent='Отправь ID другу.';
+    statusEl.textContent='Отправь ID другу!';
     hostInit();
     host.gameState.players[id]=createPlayer(id,'blue');
     startGame();
-    peer.on('connection',conn=>{clientConn=conn;addConn(conn)});
+    p.on('connection',conn=>{clientConn=conn;addConn(conn)});
   });
-  peer.on('error',err=>{statusEl.textContent='Ошибка: '+err.type});
+  p.on('error',err=>{
+    if(err.type==='unavailable-id'){tryCreatePeer(attempt+1)}
+    else{statusEl.textContent='Ошибка: '+err.type}
+  });
+}
+document.getElementById('btnCreate').addEventListener('click',()=>{
+  initAudio();isHost=true;
+  tryCreatePeer(0);
 });
 
 function addConn(conn){
@@ -468,22 +482,26 @@ document.getElementById('btnJoinMode').addEventListener('click',()=>{
   document.getElementById('btnCreate').style.display='none';
   document.getElementById('btnJoinMode').style.display='none';
   document.getElementById('joinBox').style.display='flex';
-  statusEl.textContent='Вставь ID';
+  statusEl.textContent='Вставь код от друга';
 });
 
 document.getElementById('btnJoin').addEventListener('click',()=>{
-  const hostId=document.getElementById('hostIdInput').value.trim();
+  let hostId=document.getElementById('hostIdInput').value.trim().toUpperCase().replace(/\s+/g,'');
   if(!hostId){statusEl.textContent='Пустое поле!';return}
-  isHost=false;statusEl.textContent='Подключение...';
+  if(!hostId.startsWith('MOBA-'))hostId='MOBA-'+hostId;
+  isHost=false;statusEl.textContent='Подключение к '+hostId+'...';
   peer=new Peer(null,{debug:1});
   peer.on('open',id=>{
     const conn=peer.connect(hostId,{reliable:true});hostConn=conn;
     conn.on('open',()=>{statusEl.textContent='Подключено!'});
     conn.on('data',data=>{try{const m=JSON.parse(data);if(m.type==='welcome'){myId=m.yourId;myTeam=m.team;if(!gameStarted)startGame();statusEl.textContent='Игра началась!'}else if(m.type==='state'){remoteState=m;if(!gameStarted)startGame()}else if(m.type==='gameover'){showMsg(m.winner===myTeam?'🏆 Победа!':'💀 Поражение',m.winner===myTeam?'#4f4':'#f44',0)}}catch(e){}});
-    conn.on('error',()=>{statusEl.textContent='Ошибка'});
+    conn.on('error',()=>{statusEl.textContent='Ошибка соединения'});
     conn.on('close',()=>{showMsg('Соединение потеряно','#f44',3000)});
   });
-  peer.on('error',err=>{if(err.type==='peer-unavailable')statusEl.textContent='Неверный ID';else statusEl.textContent='Ошибка: '+err.type});
+  peer.on('error',err=>{
+    if(err.type==='peer-unavailable')statusEl.textContent='ID не найден. Убедись что друг создал игру';
+    else statusEl.textContent='Ошибка: '+err.type;
+  });
 });
 
 function startGame(){
@@ -535,7 +553,6 @@ function drawChar3D(sx,sy,u,style,myTeam){
   const auraG = ctx.createRadialGradient(0,r*.9,0,0,r*.9,r*1.9);
   auraG.addColorStop(0,'rgba('+auraColor+',0)');auraG.addColorStop(.6,'rgba('+auraColor+',.15)');auraG.addColorStop(1,'rgba('+auraColor+',0)');
   ctx.fillStyle=auraG;ctx.beginPath();ctx.ellipse(0,r*.9,r*1.9,r*.65,0,0,Math.PI*2);ctx.fill();
-  // Ноги
   const legG=ctx.createLinearGradient(0,0,0,r);legG.addColorStop(0,style.body);legG.addColorStop(1,'#000');
   ctx.fillStyle=legG;
   ctx.beginPath();ctx.ellipse(-r*.32+legSwing*.1,r*.65,r*.2,r*.45,0,0,Math.PI*2);ctx.fill();
@@ -543,7 +560,6 @@ function drawChar3D(sx,sy,u,style,myTeam){
   ctx.fillStyle='#1a0a04';
   ctx.beginPath();ctx.ellipse(-r*.32+legSwing*.1,r*.95,r*.25,r*.12,0,0,Math.PI*2);ctx.fill();
   ctx.beginPath();ctx.ellipse(r*.32-legSwing*.1,r*.95,r*.25,r*.12,0,0,Math.PI*2);ctx.fill();
-  // Плащ
   if(style.isHero){
     const capeG=ctx.createLinearGradient(-r,-r,r,r);
     capeG.addColorStop(0,style.capeLight||style.cape);capeG.addColorStop(1,style.capeDark||style.cape);
@@ -553,7 +569,6 @@ function drawChar3D(sx,sy,u,style,myTeam){
     ctx.fillStyle='rgba(255,255,255,.2)';
     ctx.beginPath();ctx.moveTo(-r*.7,-r*.2);ctx.lineTo(-r*.3,r*.8);ctx.lineTo(r*.15,r*.8);ctx.lineTo(-r*.25,-r*.2);ctx.closePath();ctx.fill();
   }
-  // Тело
   const bodyG=ctx.createRadialGradient(-r*.3,-r*.5,r*.1,-r*.1,-r*.2,r*1.3);
   bodyG.addColorStop(0,style.bodyLight);bodyG.addColorStop(.4,style.body);bodyG.addColorStop(1,style.bodyDark||'#000');
   ctx.fillStyle=bodyG;ctx.beginPath();ctx.ellipse(0,0,r*.82,r*.92,0,0,Math.PI*2);ctx.fill();
@@ -565,17 +580,14 @@ function drawChar3D(sx,sy,u,style,myTeam){
     ctx.fillStyle=style.emblem||'#fd0';ctx.beginPath();ctx.arc(0,-r*.28,r*.14,0,Math.PI*2);ctx.fill();
     ctx.strokeStyle='#000';ctx.lineWidth=1.2;ctx.stroke();
   }
-  // Руки
   ctx.strokeStyle=style.head;ctx.lineWidth=r*.26;ctx.lineCap='round';
   ctx.beginPath();ctx.moveTo(-r*.75,-r*.05);ctx.lineTo(-r*.95-armSwing*.1,r*.45);ctx.stroke();
   ctx.beginPath();ctx.moveTo(r*.75,-r*.05);ctx.lineTo(r*.95+armSwing*.1+atkAnim*r*.3,r*.45-atkAnim*r*.4);ctx.stroke();
-  // Наплечники
   if(style.isHero){
     ctx.fillStyle=style.bodyLight;ctx.strokeStyle='rgba(0,0,0,.8)';ctx.lineWidth=1.5;
     ctx.beginPath();ctx.ellipse(-r*.75,-r*.15,r*.28,r*.22,0,0,Math.PI*2);ctx.fill();ctx.stroke();
     ctx.beginPath();ctx.ellipse(r*.75,-r*.15,r*.28,r*.22,0,0,Math.PI*2);ctx.fill();ctx.stroke();
   }
-  // Оружие
   if(style.weapon==='staff'){
     ctx.save();ctx.translate(r*.9,r*.3);ctx.rotate(-atkAnim*.5);
     ctx.strokeStyle='#4a2a10';ctx.lineWidth=4.5;
@@ -616,12 +628,10 @@ function drawChar3D(sx,sy,u,style,myTeam){
     for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(r*.75+i*4,r*.15);ctx.lineTo(r*1.28+i*4,-r*.58);ctx.stroke()}
     ctx.shadowBlur=0;ctx.restore();
   }
-  // Голова
   const hg=ctx.createRadialGradient(-r*.18,-r*1.18,r*.05,-r*.1,-r*1.05,r*.7);
   hg.addColorStop(0,style.headLight||'#ffe8c8');hg.addColorStop(.6,style.head);hg.addColorStop(1,style.headDark||'#8a6a48');
   ctx.fillStyle=hg;ctx.beginPath();ctx.arc(0,-r*.95,r*.62,0,Math.PI*2);ctx.fill();
   ctx.strokeStyle='rgba(0,0,0,.8)';ctx.lineWidth=2;ctx.stroke();
-  // Шлем
   if(style.helmet){
     const hG=ctx.createLinearGradient(0,-r*1.7,0,-r*.9);
     hG.addColorStop(0,style.helmetLight||style.helmet);hG.addColorStop(.5,style.helmet);hG.addColorStop(1,style.bodyDark||'#000');
@@ -642,7 +652,6 @@ function drawChar3D(sx,sy,u,style,myTeam){
       ctx.strokeStyle='#000';ctx.lineWidth=1.2;ctx.stroke();
     }
   }
-  // Глаза
   const ex=Math.cos(u.dir||0)*r*.13,ey=Math.sin(u.dir||0)*r*.06;
   ctx.fillStyle='#f8f8f8';
   ctx.beginPath();ctx.ellipse(-r*.22+ex,-r*.98+ey,r*.13,r*.11,0,0,Math.PI*2);ctx.ellipse(r*.22+ex,-r*.98+ey,r*.13,r*.11,0,0,Math.PI*2);ctx.fill();
@@ -894,10 +903,6 @@ function drawGround3D(camera,trees,decorations){
     ctx.beginPath();ctx.moveTo(lane[0].x-camera.x-8,lane[0].y-camera.y-6);
     for(let i=1;i<lane.length;i++)ctx.lineTo(lane[i].x-camera.x-8,lane[i].y-camera.y-6);
     ctx.stroke();
-    ctx.strokeStyle='rgba(255,240,200,.25)';ctx.lineWidth=28;
-    ctx.beginPath();ctx.moveTo(lane[0].x-camera.x-18,lane[0].y-camera.y-12);
-    for(let i=1;i<lane.length;i++)ctx.lineTo(lane[i].x-camera.x-18,lane[i].y-camera.y-12);
-    ctx.stroke();
     ctx.strokeStyle='rgba(230,210,170,.4)';ctx.lineWidth=2.5;
     ctx.setLineDash([16,20]);
     ctx.beginPath();ctx.moveTo(lane[0].x-camera.x,lane[0].y-camera.y);
@@ -905,7 +910,6 @@ function drawGround3D(camera,trees,decorations){
     ctx.stroke();
     ctx.setLineDash([]);
   }
-  // Река
   ctx.save();ctx.lineCap='round';
   ctx.strokeStyle='rgba(0,0,0,.5)';ctx.lineWidth=370;
   ctx.beginPath();ctx.moveTo(600-camera.x,600-camera.y);ctx.lineTo(3000-camera.x,3000-camera.y);ctx.stroke();
@@ -914,8 +918,6 @@ function drawGround3D(camera,trees,decorations){
   const rG=ctx.createLinearGradient(600-camera.x,600-camera.y,3000-camera.x,3000-camera.y);
   rG.addColorStop(0,'#0a2a50');rG.addColorStop(.25,'#1a4a80');rG.addColorStop(.5,'#2a6aa8');rG.addColorStop(.75,'#1a4a80');rG.addColorStop(1,'#0a2a50');
   ctx.strokeStyle=rG;ctx.lineWidth=320;
-  ctx.beginPath();ctx.moveTo(600-camera.x,600-camera.y);ctx.lineTo(3000-camera.x,3000-camera.y);ctx.stroke();
-  ctx.strokeStyle='rgba(150,220,255,.25)';ctx.lineWidth=160;
   ctx.beginPath();ctx.moveTo(600-camera.x,600-camera.y);ctx.lineTo(3000-camera.x,3000-camera.y);ctx.stroke();
   const t=performance.now()*.001;
   ctx.strokeStyle='rgba(200,240,255,.5)';ctx.lineWidth=3;
