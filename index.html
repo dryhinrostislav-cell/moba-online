@@ -355,7 +355,7 @@ function hostTick(dt){
   }
   gs.waveTimer-=dt;if(gs.waveTimer<=0){spawnWave(gs);gs.waveTimer=22}
 
-  // СНАРЯДЫ
+  // === СНАРЯДЫ (ПОЧИНЕНО) ===
   for(let i=gs.bullets.length-1;i>=0;i--){
     const b=gs.bullets[i];b.life-=dt;
     if(b.life<=0){
@@ -366,48 +366,35 @@ function hostTick(dt){
       gs.bullets.splice(i,1);continue;
     }
 
-    // Коса-полумесяц (обычный Q рыцаря и ульта)
-    if(b.type==='scythe'||b.type==='scythe_ult'){
-      const dx=b.targetX-b.x,dy=b.targetY-b.y,d=Math.hypot(dx,dy)||1,step=b.speed*dt;
-      b.x+=dx/d*step;b.y+=dy/d*step;b.dir=Math.atan2(dy,dx);
-      if(!b._hit)b._hit={};
-      const R=b.radius||60;
-      for(const u of gs.units){
-        if(u.hp<=0)continue;
-        const atk=b.attackerId?gs.players[b.attackerId]:null;
-        if(!atk||u.team===atk.team)continue;
-        if(b._hit[u.id])continue;
-        const ddx=u.x-b.x,ddy=u.y-b.y;
-        const distToLine=Math.abs(-Math.sin(b.dir)*ddx+Math.cos(b.dir)*ddy);
-        if(distToLine<R+u.r){
-          hostDamage(gs,u,b.dmg,b.attackerId);
-          if(b.stun)u.stunTimer=b.stun;
-          if(b.slow){u.slowTimer=b.slow;u.slowMul=0.5}
-          b._hit[u.id]=true;
-          if(b.healRatio&&atk.hp>0)atk.hp=Math.min(atk.hpMax,atk.hp+b.dmg*b.healRatio);
+    // === 1) Есть targetId — летим к цели ===
+    if(b.targetId){
+      const tgt=findById(gs,b.targetId);
+      if(!tgt||(tgt.hp!==undefined&&tgt.hp<=0)||tgt.dead){
+        if(b.type==='rocket'||b.type==='grenade'){
+          gs.effects.push({x:b.x,y:b.y,r:0,maxR:50,t:.35,maxT:.35,color:'#ff8'});
         }
+        gs.bullets.splice(i,1);continue;
       }
-      for(const id in gs.players){
-        const pl=gs.players[id];const atk=b.attackerId?gs.players[b.attackerId]:null;
-        if(!atk||pl.id===atk.id||pl.dead||pl.team===atk.team)continue;
-        if(b._hit[pl.id])continue;
-        const ddx=pl.x-b.x,ddy=pl.y-b.y;
-        const distToLine=Math.abs(-Math.sin(b.dir)*ddx+Math.cos(b.dir)*ddy);
-        if(distToLine<R+pl.r){
-          hostDamage(gs,pl,b.dmg,b.attackerId);
-          if(b.stun)pl.stunTimer=b.stun;
-          if(b.slow){pl.slowTimer=b.slow;pl.slowMul=0.5}
-          b._hit[pl.id]=true;
-          if(b.healRatio&&atk.hp>0)atk.hp=Math.min(atk.hpMax,atk.hp+b.dmg*b.healRatio);
+      const dx=tgt.x-b.x,dy=tgt.y-b.y,d=Math.hypot(dx,dy),step=b.speed*dt;
+      b.dir=Math.atan2(dy,dx);
+      if(d-(tgt.r||0)<step){
+        hostDamage(gs,tgt,b.dmg,b.attackerId);
+        if(b.slow){tgt.slowTimer=b.slow;tgt.slowMul=0.5}
+        if(b.stun){tgt.stunTimer=b.stun}
+        if(b.type==='rocket'||b.type==='grenade'){
+          gs.effects.push({x:tgt.x,y:tgt.y,r:0,maxR:70,t:.45,maxT:.45,color:'#ff8'});
+          gs.effects.push({x:tgt.x,y:tgt.y,r:0,maxR:40,t:.4,maxT:.4,color:'#f60'});
         }
+        gs.bullets.splice(i,1);continue;
       }
-      if(d<step){gs.bullets.splice(i,1);continue}
+      b.x+=dx/d*step;b.y+=dy/d*step;
       continue;
     }
 
-    // Обычный снаряд
+    // === 2) Снаряд к точке ===
     if(!b.targetId && b.targetX!==undefined){
       const dx=b.targetX-b.x,dy=b.targetY-b.y,d=Math.hypot(dx,dy),step=b.speed*dt;
+      b.dir=Math.atan2(dy,dx);
       if(d<step){
         if(b.type==='rocket'||b.type==='rocket_ult'||b.type==='grenade'){
           gs.effects.push({x:b.targetX,y:b.targetY,r:0,maxR:b.radius||90,t:.55,maxT:.55,color:'#ff8'});
@@ -416,35 +403,35 @@ function hostTick(dt){
         }
         const atk=b.attackerId?gs.players[b.attackerId]:null;
         const R=b.radius||90;
-        for(const u of gs.units){if(u.hp<=0)continue;if(!atk||u.team===atk.team)continue;if(Math.hypot(u.x-b.targetX,u.y-b.targetY)<R+u.r){hostDamage(gs,u,b.dmg,b.attackerId);if(b.stun)u.stunTimer=b.stun}}
-        for(const id in gs.players){const pl=gs.players[id];if(!atk||pl.id===atk.id||pl.dead||pl.team===atk.team)continue;if(Math.hypot(pl.x-b.targetX,pl.y-b.targetY)<R+pl.r){hostDamage(gs,pl,b.dmg,b.attackerId);if(b.stun)pl.stunTimer=b.stun}}
+        for(const u of gs.units){
+          if(u.hp<=0)continue;
+          if(!atk||u.team===atk.team)continue;
+          if(Math.hypot(u.x-b.targetX,u.y-b.targetY)<R+u.r){
+            hostDamage(gs,u,b.dmg,b.attackerId);
+            if(b.slow){u.slowTimer=b.slow;u.slowMul=0.5}
+            if(b.stun)u.stunTimer=b.stun;
+          }
+        }
+        for(const id in gs.players){
+          const pl=gs.players[id];
+          if(!atk||pl.id===atk.id||pl.dead||pl.team===atk.team)continue;
+          if(Math.hypot(pl.x-b.targetX,pl.y-b.targetY)<R+pl.r){
+            hostDamage(gs,pl,b.dmg,b.attackerId);
+            if(b.slow){pl.slowTimer=b.slow;pl.slowMul=0.5}
+            if(b.stun)pl.stunTimer=b.stun;
+          }
+        }
         gs.bullets.splice(i,1);continue;
       }
-      b.x+=dx/d*step;b.y+=dy/d*step;b.dir=Math.atan2(dy,dx);
+      b.x+=dx/d*step;b.y+=dy/d*step;
       continue;
     }
 
-    const tgt=findById(gs,b.targetId);
-    if(!tgt||(tgt.hp!==undefined&&tgt.hp<=0)||tgt.dead){
-      if(b.type==='rocket'||b.type==='grenade'){
-        gs.effects.push({x:b.x,y:b.y,r:0,maxR:50,t:.35,maxT:.35,color:'#ff8'});
-      }
-      gs.bullets.splice(i,1);continue;
-    }
-    const dx=tgt.x-b.x,dy=tgt.y-b.y,d=Math.hypot(dx,dy),step=b.speed*dt;
-    b.dir=Math.atan2(dy,dx);
-    if(d-(tgt.r||0)<step){
-      hostDamage(gs,tgt,b.dmg,b.attackerId);
-      if(b.type==='rocket'||b.type==='grenade'){
-        gs.effects.push({x:tgt.x,y:tgt.y,r:0,maxR:70,t:.45,maxT:.45,color:'#ff8'});
-        gs.effects.push({x:tgt.x,y:tgt.y,r:0,maxR:40,t:.4,maxT:.4,color:'#f60'});
-      }
-      gs.bullets.splice(i,1);continue;
-    }
-    b.x+=dx/d*step;b.y+=dy/d*step;
+    // === 3) Мусор — удаляем ===
+    gs.bullets.splice(i,1);
   }
 
-  // ЛАЗЕРНЫЕ ЛУЧИ (визуальные)
+  // ЛАЗЕРЫ
   for(let i=gs.beams.length-1;i>=0;i--){
     const bm=gs.beams[i];bm.t-=dt;
     if(bm.t<=0){gs.beams.splice(i,1);continue}
@@ -513,14 +500,20 @@ function tryAttack(p){
   const tid=t.id||(t===host.gameState.bases.blue?'base_blue':t===host.gameState.bases.red?'base_red':null);
   const hero=p.heroId||'knight';
   const dir=Math.atan2(t.y-p.y,t.x-p.x);
+  p.dir=dir;
   let dmg=p.atkDamage,color,btype;
   if(hero==='tinker'){dmg=p.atkDamage*1.15;color=p.team==='blue'?'#ff8':'#f80';btype='rocket'}
   else if(hero==='archer'){color=p.team==='blue'?'#8f8':'#f88';btype='arrow'}
   else{color=p.team==='blue'?'#8cf':'#c8f';btype='scythe'}
-  host.gameState.bullets.push({x:p.x,y:p.y-26,targetId:tid,dmg:dmg,attackerId:p.id,speed:hero==='archer'?720:560,life:2.5,color:color,type:btype,dir:dir,hero:hero});
+  host.gameState.bullets.push({
+    x:p.x,y:p.y-26,
+    targetId:tid,
+    dmg:dmg,attackerId:p.id,
+    speed:hero==='archer'?720:560,
+    life:2.5,color:color,type:btype,dir:dir,hero:hero
+  });
 }
 
-/* ===== УНИКАЛЬНЫЕ СКИЛЛЫ С ВИЗУАЛЬНЫМИ СНАРЯДАМИ ===== */
 function hostCast(p,key){
   if(p.dead||!p.abil[key].unlocked||p.abil[key].cd>0)return;
   const A=HEROES[p.heroId].abil[key];
@@ -529,84 +522,114 @@ function hostCast(p,key){
   if(p.id===myId)playSound('ability');
   const gs=host.gameState;
   const hero=p.heroId;
-  const team=p.team;
+
+  function dirToEnemy(range){
+    const t=findNearestEnemy(gs,p,range,true);
+    if(t){p.dir=Math.atan2(t.y-p.y,t.x-p.x);return{ang:p.dir,tx:t.x,ty:t.y,found:true,target:t}}
+    return{ang:p.dir,tx:p.x+Math.cos(p.dir)*range,ty:p.y+Math.sin(p.dir)*range,found:false,target:null};
+  }
+  function dirMove(){
+    const dx=p.input.dx,dy=p.input.dy;
+    if(Math.hypot(dx,dy)>.1){p.dir=Math.atan2(dy,dx)}
+    return p.dir;
+  }
 
   if(hero==='knight'){
     if(key==='Q'){
-      // Летящая коса-полумесяц вперёд
-      const dir=Math.atan2(Math.sin(p.dir),Math.cos(p.dir));
+      const d=dirToEnemy(400);
       gs.effects.push({x:p.x,y:p.y,r:0,maxR:50,t:.3,maxT:.3,color:'#c8f'});
-      gs.bullets.push({
-        x:p.x,y:p.y-20,
-        targetId:null,
-        targetX:p.x+Math.cos(p.dir)*320,
-        targetY:p.y+Math.sin(p.dir)*320,
-        dmg:A.dmg,attackerId:p.id,
-        speed:550,life:1.5,color:'#8b5cf6',
-        type:'scythe',dir:p.dir,hero:'knight',
-        radius:A.radius,slow:A.slow
-      });
+      if(d.found){
+        gs.bullets.push({
+          x:p.x,y:p.y-20,
+          targetId:d.target.id||(d.target===gs.bases.blue?'base_blue':d.target===gs.bases.red?'base_red':null),
+          dmg:A.dmg,attackerId:p.id,
+          speed:600,life:1.2,color:'#8b5cf6',
+          type:'scythe',dir:d.ang,hero:'knight',
+          radius:60,slow:A.slow
+        });
+      } else {
+        gs.bullets.push({
+          x:p.x,y:p.y-20,
+          targetId:null,targetX:d.tx,targetY:d.ty,
+          dmg:A.dmg,attackerId:p.id,
+          speed:600,life:1.2,color:'#8b5cf6',
+          type:'scythe',dir:d.ang,hero:'knight',
+          radius:60,slow:A.slow
+        });
+      }
     }
     else if(key==='W'){
       p.shield=A.shield;p.shieldTimer=A.dur;
       gs.effects.push({x:p.x,y:p.y,r:0,maxR:80,t:.5,maxT:.5,color:'#8fe0ff'});
-      // Сфера-щит — долгий эффект
       gs.effects.push({x:p.x,y:p.y,r:0,maxR:110,t:.9,maxT:.9,color:'#c8f'});
       gs.effects.push({x:p.x,y:p.y,r:0,maxR:140,t:1.1,maxT:1.1,color:'#5cf'});
     }
     else if(key==='E'){
-      const dx=p.input.dx,dy=p.input.dy;let nx=dx,ny=dy;if(Math.hypot(nx,ny)<.1){nx=0;ny=-1}
-      const L=Math.hypot(nx,ny);nx/=L;ny/=L;
+      const ang=dirMove();
+      const nx=Math.cos(ang),ny=Math.sin(ang);
       const oldX=p.x,oldY=p.y;
       p.x+=nx*A.distance;p.y+=ny*A.distance;
       p.x=Math.max(p.r,Math.min(WORLD.w-p.r,p.x));p.y=Math.max(p.r,Math.min(WORLD.h-p.r,p.y));
-      // Луч от старого места к новому (шлейф)
       gs.beams.push({x1:oldX,y1:oldY,x2:p.x,y2:p.y,t:.35,maxT:.35,color:'#8cf',width:18});
-      // Вспышка на новом месте
       gs.effects.push({x:p.x,y:p.y,r:0,maxR:70,t:.4,maxT:.4,color:'#8af'});
       gs.effects.push({x:p.x,y:p.y,r:0,maxR:40,t:.35,maxT:.35,color:'#fff'});
-      // Урон рядом
       for(const u of gs.units){if(u.hp<=0||u.team===p.team)continue;if(Math.hypot(u.x-p.x,u.y-p.y)<70+u.r)hostDamage(gs,u,A.damage,p.id)}
     }
     else if(key==='R'){
+      const d=dirToEnemy(600);
       gs.effects.push({x:p.x,y:p.y,r:0,maxR:70,t:.35,maxT:.35,color:'#c8f'});
       gs.effects.push({x:p.x,y:p.y,r:0,maxR:40,t:.35,maxT:.35,color:'#fff'});
-      gs.bullets.push({
-        x:p.x,y:p.y-20,
-        targetId:null,
-        targetX:p.x+Math.cos(p.dir)*520,
-        targetY:p.y+Math.sin(p.dir)*520,
-        dmg:A.dmg,attackerId:p.id,
-        speed:400,life:2.5,color:'#8b5cf6',
-        type:'scythe_ult',dir:p.dir,hero:'knight',
-        radius:A.radius,stun:A.stun,healRatio:A.healRatio
-      });
+      if(d.found){
+        gs.bullets.push({
+          x:p.x,y:p.y-20,
+          targetId:d.target.id||(d.target===gs.bases.blue?'base_blue':d.target===gs.bases.red?'base_red':null),
+          dmg:A.dmg,attackerId:p.id,
+          speed:400,life:2.5,color:'#8b5cf6',
+          type:'scythe_ult',dir:d.ang,hero:'knight',
+          radius:A.radius,stun:A.stun,healRatio:A.healRatio
+        });
+      } else {
+        gs.bullets.push({
+          x:p.x,y:p.y-20,
+          targetId:null,targetX:d.tx,targetY:d.ty,
+          dmg:A.dmg,attackerId:p.id,
+          speed:400,life:2.5,color:'#8b5cf6',
+          type:'scythe_ult',dir:d.ang,hero:'knight',
+          radius:A.radius,stun:A.stun,healRatio:A.healRatio
+        });
+      }
     }
   }
   else if(hero==='tinker'){
     if(key==='Q'){
-      // 3 ракеты веером вперёд
-      const baseAng=p.dir;
+      const d=dirToEnemy(400);
       for(let i=0;i<3;i++){
-        const offset=(i-1)*0.25;
-        const ang=baseAng+offset;
-        const dx=Math.cos(ang),dy=Math.sin(ang);
-        const tx=p.x+dx*260,ty=p.y+dy*260;
-        gs.bullets.push({
-          x:p.x,y:p.y-30,
-          targetId:null,
-          targetX:tx,targetY:ty,
-          dmg:A.dmg,attackerId:p.id,
-          speed:480,life:1.5,color:'#ff8',
-          type:'rocket',dir:ang,hero:'tinker'
-        });
+        const off=(i-1)*0.18;
+        const ang=d.ang+off;
+        if(d.found){
+          gs.bullets.push({
+            x:p.x,y:p.y-30,
+            targetId:d.target.id||(d.target===gs.bases.blue?'base_blue':d.target===gs.bases.red?'base_red':null),
+            dmg:A.dmg,attackerId:p.id,
+            speed:500,life:1.5,color:'#ff8',
+            type:'rocket',dir:ang,hero:'tinker'
+          });
+        } else {
+          const tx=p.x+Math.cos(ang)*260,ty=p.y+Math.sin(ang)*260;
+          gs.bullets.push({
+            x:p.x,y:p.y-30,
+            targetId:null,targetX:tx,targetY:ty,
+            dmg:A.dmg,attackerId:p.id,
+            speed:500,life:1.5,color:'#ff8',
+            type:'rocket',dir:ang,hero:'tinker'
+          });
+        }
       }
       gs.effects.push({x:p.x,y:p.y-30,r:0,maxR:40,t:.25,maxT:.25,color:'#ff8'});
     }
     else if(key==='W'){
       p.hp=Math.min(p.hpMax,p.hp+A.heal);
       p.speedBuffVal=A.speedBuff;p.speedBuffTimer=A.speedDur;
-      // Искры ремонта
       for(let i=0;i<6;i++){
         const a=Math.random()*6.28;
         gs.effects.push({x:p.x+Math.cos(a)*30,y:p.y+Math.sin(a)*30,r:0,maxR:25,t:.5,maxT:.5,color:'#8f8'});
@@ -615,51 +638,67 @@ function hostCast(p,key){
       gs.effects.push({x:p.x,y:p.y,r:0,maxR:80,t:.55,maxT:.55,color:'#cfc'});
     }
     else if(key==='E'){
-      const dx=p.input.dx,dy=p.input.dy;let nx=dx,ny=dy;if(Math.hypot(nx,ny)<.1){nx=0;ny=-1}
-      const L=Math.hypot(nx,ny);nx/=L;ny/=L;
+      const ang=dirMove();
+      const nx=Math.cos(ang),ny=Math.sin(ang);
       const oldX=p.x,oldY=p.y;
       p.x+=nx*A.distance;p.y+=ny*A.distance;
       p.x=Math.max(p.r,Math.min(WORLD.w-p.r,p.x));p.y=Math.max(p.r,Math.min(WORLD.h-p.r,p.y));
-      // Лазерный луч
       gs.beams.push({x1:oldX,y1:oldY,x2:p.x,y2:p.y,t:.3,maxT:.3,color:'#8fe0ff',width:22});
       gs.beams.push({x1:oldX,y1:oldY,x2:p.x,y2:p.y,t:.3,maxT:.3,color:'#fff',width:8});
       gs.effects.push({x:p.x,y:p.y,r:0,maxR:80,t:.45,maxT:.45,color:'#8fe0ff'});
       for(const u of gs.units){if(u.hp<=0||u.team===p.team)continue;if(Math.hypot(u.x-p.x,u.y-p.y)<80+u.r)hostDamage(gs,u,A.damage,p.id)}
     }
     else if(key==='R'){
-      const dx=p.input.dx,dy=p.input.dy;let nx=dx,ny=dy;if(Math.hypot(nx,ny)<.1){nx=1;ny=0}
-      const L=Math.hypot(nx,ny);nx/=L;ny/=L;
+      const d=dirToEnemy(600);
       gs.effects.push({x:p.x,y:p.y,r:0,maxR:60,t:.4,maxT:.4,color:'#ff0'});
       gs.effects.push({x:p.x,y:p.y,r:0,maxR:30,t:.35,maxT:.35,color:'#fff'});
-      gs.bullets.push({
-        x:p.x,y:p.y-30,
-        targetId:null,
-        targetX:p.x+nx*A.range,
-        targetY:p.y+ny*A.range,
-        dmg:A.dmg,attackerId:p.id,
-        speed:520,life:3,color:'#ff0',
-        type:'rocket_ult',dir:Math.atan2(ny,nx),hero:'tinker',
-        radius:A.radius,stun:A.stun
-      });
+      if(d.found){
+        gs.bullets.push({
+          x:p.x,y:p.y-30,
+          targetId:d.target.id||(d.target===gs.bases.blue?'base_blue':d.target===gs.bases.red?'base_red':null),
+          dmg:A.dmg,attackerId:p.id,
+          speed:520,life:3,color:'#ff0',
+          type:'rocket_ult',dir:d.ang,hero:'tinker',
+          radius:A.radius,stun:A.stun
+        });
+      } else {
+        gs.bullets.push({
+          x:p.x,y:p.y-30,
+          targetId:null,targetX:d.tx,targetY:d.ty,
+          dmg:A.dmg,attackerId:p.id,
+          speed:520,life:3,color:'#ff0',
+          type:'rocket_ult',dir:d.ang,hero:'tinker',
+          radius:A.radius,stun:A.stun
+        });
+      }
     }
   }
   else if(hero==='archer'){
     if(key==='Q'){
-      // 5 стрел веером
-      const baseAng=p.dir;
+      const d=dirToEnemy(400);
       for(let i=0;i<5;i++){
-        const offset=(i-2)*0.18;
-        const ang=baseAng+offset;
-        const tx=p.x+Math.cos(ang)*220;
-        const ty=p.y+Math.sin(ang)*220;
-        gs.bullets.push({
-          x:p.x,y:p.y-26,
-          targetId:null,targetX:tx,targetY:ty,
-          dmg:A.dmg,attackerId:p.id,
-          speed:700,life:1.2,color:'#8f8',
-          type:'arrow',dir:ang,hero:'archer',
-          slow:A.slow
-        });
+        const off=(i-2)*0.15;
+        const ang=d.ang+off;
+        if(d.found){
+          gs.bullets.push({
+            x:p.x,y:p.y-26,
+            targetId:d.target.id||(d.target===gs.bases.blue?'base_blue':d.target===gs.bases.red?'base_red':null),
+            dmg:A.dmg,attackerId:p.id,
+            speed:750,life:1.2,color:'#8f8',
+            type:'arrow',dir:ang,hero:'archer',
+            slow:A.slow
+          });
+        } else {
+          const tx=p.x+Math.cos(ang)*240,ty=p.y+Math.sin(ang)*240;
+          gs.bullets.push({
+            x:p.x,y:p.y-26,
+            targetId:null,targetX:tx,targetY:ty,
+            dmg:A.dmg,attackerId:p.id,
+            speed:750,life:1.2,color:'#8f8',
+            type:'arrow',dir:ang,hero:'archer',
+            slow:A.slow
+          });
+        }
       }
       gs.effects.push({x:p.x,y:p.y,r:0,maxR:40,t:.25,maxT:.25,color:'#8f8'});
     }
@@ -669,34 +708,38 @@ function hostCast(p,key){
       gs.effects.push({x:p.x,y:p.y,r:0,maxR:70,t:.5,maxT:.5,color:'#fff'});
     }
     else if(key==='E'){
-      const dx=p.input.dx,dy=p.input.dy;let nx=dx,ny=dy;if(Math.hypot(nx,ny)<.1){nx=0;ny=1}
-      const L=Math.hypot(nx,ny);nx/=L;ny/=L;
+      const ang=dirMove();
+      const nx=-Math.cos(ang),ny=-Math.sin(ang);
       const oldX=p.x,oldY=p.y;
-      p.x-=nx*A.distance;p.y-=ny*A.distance;
+      p.x+=nx*A.distance;p.y+=ny*A.distance;
       p.x=Math.max(p.r,Math.min(WORLD.w-p.r,p.x));p.y=Math.max(p.r,Math.min(WORLD.h-p.r,p.y));
-      // Шлейф-стрела
       gs.beams.push({x1:oldX,y1:oldY,x2:p.x,y2:p.y,t:.3,maxT:.3,color:'#af8',width:14});
       gs.effects.push({x:p.x,y:p.y,r:0,maxR:80,t:.4,maxT:.4,color:'#af8'});
       for(const u of gs.units){if(u.hp<=0||u.team===p.team)continue;if(Math.hypot(u.x-p.x,u.y-p.y)<80+u.r){hostDamage(gs,u,A.damage,p.id);u.slowTimer=A.slow;u.slowMul=0.5}}
     }
     else if(key==='R'){
-      const t=findNearestEnemy(gs,p,A.range,true);
-      let tx,ty;
-      if(t){tx=t.x;ty=t.y}
-      else{tx=p.x+Math.cos(p.dir)*A.range;ty=p.y+Math.sin(p.dir)*A.range}
-      const dirAng=Math.atan2(ty-p.y,tx-p.x);
+      const d=dirToEnemy(A.range);
       gs.effects.push({x:p.x,y:p.y,r:0,maxR:70,t:.4,maxT:.4,color:'#ff4'});
       gs.effects.push({x:p.x,y:p.y,r:0,maxR:35,t:.35,maxT:.35,color:'#fff'});
-      gs.bullets.push({
-        x:p.x,y:p.y-30,
-        targetId:null,
-        targetX:p.x+Math.cos(dirAng)*A.range,
-        targetY:p.y+Math.sin(dirAng)*A.range,
-        dmg:A.dmg,attackerId:p.id,
-        speed:900,life:3,color:'#ff4',
-        type:'arrow_ult',dir:dirAng,hero:'archer',
-        radius:45
-      });
+      if(d.found){
+        gs.bullets.push({
+          x:p.x,y:p.y-30,
+          targetId:d.target.id||(d.target===gs.bases.blue?'base_blue':d.target===gs.bases.red?'base_red':null),
+          dmg:A.dmg,attackerId:p.id,
+          speed:950,life:3,color:'#ff4',
+          type:'arrow_ult',dir:d.ang,hero:'archer',
+          radius:45
+        });
+      } else {
+        gs.bullets.push({
+          x:p.x,y:p.y-30,
+          targetId:null,targetX:d.tx,targetY:d.ty,
+          dmg:A.dmg,attackerId:p.id,
+          speed:950,life:3,color:'#ff4',
+          type:'arrow_ult',dir:d.ang,hero:'archer',
+          radius:45
+        });
+      }
     }
   }
 }
@@ -1480,7 +1523,6 @@ function renderState(state,myId){
   drawBase3D(state.bases.blue,camera,myTeam);
   drawBase3D(state.bases.red,camera,myTeam);
 
-  // ЛАЗЕРНЫЕ ЛУЧИ ПОД ЮНИТАМИ
   if(state.beams)for(const bm of state.beams){
     const a=Math.max(0,bm.t/bm.maxT);
     const x1=bm.x1-camera.x,y1=bm.y1-camera.y;
@@ -1529,7 +1571,6 @@ function renderState(state,myId){
     ctx.fillStyle='#fd0';ctx.beginPath();ctx.arc(sx,sy-3,3,0,Math.PI*2);ctx.fill();
   }
 
-  // СНАРЯДЫ
   for(const b of state.bullets){
     const sx=b.x-camera.x,sy=b.y-camera.y;
     if(sx<-80||sy<-80||sx>W+80||sy>H+80)continue;
@@ -1700,4 +1741,4 @@ function mainLoop(now){
 (function(){var s=document.getElementById('status');if(s){s.textContent='Скрипт загружен. Нажми "Создать игру"';s.style.color='#8cf';}})();
 </script>
 </body>
-</html>
+  </html>
