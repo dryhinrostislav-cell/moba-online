@@ -293,7 +293,7 @@ function createPlayer(id,team,heroId){
     hp:H.hpMax,hpMax:H.hpMax,mp:H.mpMax,mpMax:H.mpMax,speed:H.speed,hpRegen:H.hpRegen,mpRegen:H.mpRegen,atkRange:H.atkRange,atkDamage:H.atkDamage,
     atkCooldown:0.75,atkTimer:0,level:1,xp:0,xpNext:80,kills:0,shards:0,inventory:[],spellCdMul:1,dead:false,respawnTimer:0,
     input:{dx:0,dy:0},attackHeld:false,attackAnim:0,hurtFlash:0,castAnim:0,
-    shield:0,shieldTimer:0,slowTimer:0,slowMul:1,evadeTimer:0,speedBuffTimer:0,speedBuffVal:0,trailTimer:0,
+    shield:0,shieldTimer:0,slowTimer:0,slowMul:1,evadeTimer:0,speedBuffTimer:0,speedBuffVal:0,trailTimer:0,atBase:false,
     abil:{Q:{cd:0,level:1,unlocked:true},W:{cd:0,level:0,unlocked:false},E:{cd:0,level:0,unlocked:false},R:{cd:0,level:0,unlocked:false}}};
 }
 
@@ -329,7 +329,20 @@ function hostTick(dt){
       }
     }else p.walking=false;
     p.x=Math.max(p.r,Math.min(WORLD.w-p.r,p.x));p.y=Math.max(p.r,Math.min(WORLD.h-p.r,p.y));
-    p.hp=Math.min(p.hpMax,p.hp+p.hpRegen*dt);p.mp=Math.min(p.mpMax,p.mp+p.mpRegen*dt);
+
+    // === Лечение на своей базе ===
+    const ownBase=p.team==='blue'?gs.bases.blue:gs.bases.red;
+    const dBase=Math.hypot(p.x-ownBase.x,p.y-ownBase.y);
+    let regenHp=p.hpRegen, regenMp=p.mpRegen;
+    if(dBase<ownBase.r+80){
+      regenHp=Math.max(regenHp,p.hpMax*0.4);
+      regenMp=Math.max(regenMp,p.mpMax*0.4);
+      p.atBase=true;
+      if(dBase<ownBase.r*0.6){regenHp=p.hpMax*0.8;regenMp=p.mpMax*0.8;}
+    }else{
+      p.atBase=false;
+    }
+    p.hp=Math.min(p.hpMax,p.hp+regenHp*dt);p.mp=Math.min(p.mpMax,p.mp+regenMp*dt);
     p.atkTimer=Math.max(0,p.atkTimer-dt);
     for(const k of ['Q','W','E','R'])if(p.abil[k].cd>0)p.abil[k].cd=Math.max(0,p.abil[k].cd-dt);
     if(p.attackHeld)tryAttack(p);
@@ -693,12 +706,31 @@ function hostCast(p,key){
 
 function hostEndGame(w){hostBroadcast({type:'gameover',winner:w});showMsg(w==='blue'?'🏆 Синие!':'🏆 Красные!','#4f4',0)}
 
+/* ===== ВОЛНЫ КРИПОВ — 3 ГРУППЫ ПО 3 В ТРЁХ НАПРАВЛЕНИЯХ ===== */
 function spawnWave(gs){
   if(gs.units.filter(u=>u.type==='minion').length>70)return;
-  for(let li=0;li<3;li++)for(let i=0;i<3;i++){
-    const a=Math.random()*6.28,b=Math.random()*6.28;
-    gs.units.push({id:'mb'+Math.random().toString(36).slice(2,9),type:'minion',team:'blue',x:BASES.blue.x+Math.cos(a)*30,y:BASES.blue.y+Math.sin(a)*30,dir:0,walking:false,r:15,hp:80,hpMax:80,speed:85,atkRange:75,atkDamage:10,atkCooldown:.95,atkTimer:0,laneIdx:li,waypointIdx:0,attackAnim:0,hurtFlash:0});
-    gs.units.push({id:'mr'+Math.random().toString(36).slice(2,9),type:'minion',team:'red',x:BASES.red.x+Math.cos(b)*30,y:BASES.red.y+Math.sin(b)*30,dir:Math.PI,walking:false,r:15,hp:80,hpMax:80,speed:85,atkRange:75,atkDamage:10,atkCooldown:.95,atkTimer:0,laneIdx:li,waypointIdx:LANES[li].length-1,attackAnim:0,hurtFlash:0});
+  const blueBase=BASES.blue, redBase=BASES.red;
+  for(let li=0;li<3;li++){
+    const lane=LANES[li];
+    // Синие: идут к следующей точке лейна от базы
+    const bNext=lane[1];
+    const bAng=Math.atan2(bNext.y-blueBase.y, bNext.x-blueBase.x);
+    // Красные: идут к предпоследней точке лейна от базы
+    const rNext=lane[lane.length-2];
+    const rAng=Math.atan2(rNext.y-redBase.y, rNext.x-redBase.x);
+    for(let i=0;i<3;i++){
+      const spread=(i-1)*0.15; // веер из 3 крипов
+      const bA=bAng+spread;
+      const rA=rAng+spread;
+      const bR=blueBase.r+18;
+      const rR=redBase.r+18;
+      gs.units.push({id:'mb'+Math.random().toString(36).slice(2,9),type:'minion',team:'blue',
+        x:blueBase.x+Math.cos(bA)*bR, y:blueBase.y+Math.sin(bA)*bR,
+        dir:bAng,walking:true,r:15,hp:80,hpMax:80,speed:85,atkRange:75,atkDamage:10,atkCooldown:.95,atkTimer:0,laneIdx:li,waypointIdx:0,attackAnim:0,hurtFlash:0});
+      gs.units.push({id:'mr'+Math.random().toString(36).slice(2,9),type:'minion',team:'red',
+        x:redBase.x+Math.cos(rA)*rR, y:redBase.y+Math.sin(rA)*rR,
+        dir:rAng,walking:true,r:15,hp:80,hpMax:80,speed:85,atkRange:75,atkDamage:10,atkCooldown:.95,atkTimer:0,laneIdx:li,waypointIdx:lane.length-1,attackAnim:0,hurtFlash:0});
+    }
   }
 }
 
@@ -747,7 +779,7 @@ function hostBroadcastState(){
   const gs=host.gameState;if(!gs)return;
   try{
     hostBroadcast({type:'state',
-      players:Object.values(gs.players).map(p=>({id:p.id,team:p.team,heroId:p.heroId,x:p.x,y:p.y,r:p.r,dir:p.dir,walking:p.walking,hp:p.hp,hpMax:p.hpMax,mp:p.mp,mpMax:p.mpMax,level:p.level,kills:p.kills,dead:p.dead,shards:p.shards||0,inventory:p.inventory||[],respawnTimer:p.respawnTimer,attackAnim:p.attackAnim,hurtFlash:p.hurtFlash,castAnim:p.castAnim,shield:p.shield,shieldTimer:p.shieldTimer,evadeTimer:p.evadeTimer,abil:{Q:{cd:p.abil.Q.cd,level:p.abil.Q.level,unlocked:p.abil.Q.unlocked},W:{cd:p.abil.W.cd,level:p.abil.W.level,unlocked:p.abil.W.unlocked},E:{cd:p.abil.E.cd,level:p.abil.E.level,unlocked:p.abil.E.unlocked},R:{cd:p.abil.R.cd,level:p.abil.R.level,unlocked:p.abil.R.unlocked}}})),
+      players:Object.values(gs.players).map(p=>({id:p.id,team:p.team,heroId:p.heroId,x:p.x,y:p.y,r:p.r,dir:p.dir,walking:p.walking,hp:p.hp,hpMax:p.hpMax,mp:p.mp,mpMax:p.mpMax,level:p.level,kills:p.kills,dead:p.dead,shards:p.shards||0,inventory:p.inventory||[],respawnTimer:p.respawnTimer,attackAnim:p.attackAnim,hurtFlash:p.hurtFlash,castAnim:p.castAnim,shield:p.shield,shieldTimer:p.shieldTimer,evadeTimer:p.evadeTimer,atBase:p.atBase,abil:{Q:{cd:p.abil.Q.cd,level:p.abil.Q.level,unlocked:p.abil.Q.unlocked},W:{cd:p.abil.W.cd,level:p.abil.W.level,unlocked:p.abil.W.unlocked},E:{cd:p.abil.E.cd,level:p.abil.E.level,unlocked:p.abil.E.unlocked},R:{cd:p.abil.R.cd,level:p.abil.R.level,unlocked:p.abil.R.unlocked}}})),
       units:gs.units.map(u=>({id:u.id,type:u.type,team:u.team,x:u.x,y:u.y,r:u.r,dir:u.dir,walking:u.walking,hp:u.hp,hpMax:u.hpMax,big:!!u.big,terror:!!u.terror,attackAnim:u.attackAnim||0,hurtFlash:u.hurtFlash||0,deathAnim:u.deathAnim||0,towerAnim:u.towerAnim||0})),
       bullets:gs.bullets.map(b=>({x:b.x,y:b.y,color:b.color,type:b.type||'bullet',dir:b.dir||0,hero:b.hero||''})),
       beams:(gs.beams||[]).map(bm=>({x1:bm.x1,y1:bm.y1,x2:bm.x2,y2:bm.y2,color:bm.color,t:bm.t,maxT:bm.maxT,width:bm.width})),
@@ -822,7 +854,7 @@ function drawHeroPreview(canvas, heroId){
   ctx=c;
   W=cssW;H=cssH;
   c.clearRect(0,0,cssW,cssH);
-  const fakeU={x:0,y:0,r:22,dir:-Math.PI/2,walking:false,attackAnim:0,hurtFlash:0,deathAnim:0,id:'preview',heroId:heroId,team:'blue',shield:0,evadeTimer:0,_t:0};
+  const fakeU={x:0,y:0,r:22,dir:-Math.PI/2,walking:false,attackAnim:0,hurtFlash:0,deathAnim:0,id:'preview',heroId:heroId,team:'blue',shield:0,evadeTimer:0,_t:0,atBase:false};
   try{ drawHero(cssW/2,cssH*0.72,fakeU,'blue'); }catch(e){ console.error('preview err',e); }
   ctx=oldCtx;W=oldW;H=oldH;
 }
@@ -1417,6 +1449,25 @@ function drawHero(sx,sy,u,myTeam){
   const auraCol = isMe ? '80,255,140' : (isAlly ? '100,200,255' : '255,80,80');
   const pulse = 1 + Math.sin(t*3)*0.12;
   ctx.save();
+  // Лечение на базе — зелёные искры + подсветка
+  if(u.atBase){
+    for(let i=0;i<6;i++){
+      const a=(i/6)*Math.PI*2+t*2;
+      const rr=u.r*1.6+Math.sin(t*3+i)*u.r*0.2;
+      const px=sx+Math.cos(a)*rr;
+      const py=sy+Math.sin(a)*rr*0.5+u.r*0.6-Math.abs(Math.sin(t*2+i))*u.r*0.8;
+      const alpha=0.5+Math.sin(t*4+i)*0.4;
+      ctx.fillStyle='rgba(120,255,140,'+alpha+')';
+      ctx.shadowColor='#6f6';ctx.shadowBlur=12;
+      ctx.beginPath();ctx.arc(px,py,2.5,0,Math.PI*2);ctx.fill();
+      ctx.shadowBlur=0;
+    }
+    const healG=ctx.createRadialGradient(sx,sy+u.r*0.9,0,sx,sy+u.r*0.9,u.r*1.8);
+    healG.addColorStop(0,'rgba(120,255,140,0.35)');
+    healG.addColorStop(1,'rgba(120,255,140,0)');
+    ctx.fillStyle=healG;
+    ctx.beginPath();ctx.ellipse(sx,sy+u.r*0.9,u.r*1.8,u.r*0.6,0,0,Math.PI*2);ctx.fill();
+  }
   ctx.strokeStyle='rgba('+auraCol+',0.9)';ctx.lineWidth=3.5;
   ctx.beginPath();ctx.ellipse(sx,sy+u.r*1.15,u.r*1.7*pulse,u.r*0.55*pulse,0,0,Math.PI*2);ctx.stroke();
   ctx.strokeStyle='rgba('+auraCol+',0.35)';ctx.lineWidth=6;
@@ -1643,6 +1694,11 @@ function drawBase3D(b,camera,myTeam){
   outerG.addColorStop(0,main);outerG.addColorStop(1,'#051a3a');
   ctx.fillStyle=outerG;ctx.beginPath();ctx.ellipse(sx,sy+b.r*.3,b.r*1.15,b.r*.92,0,0,Math.PI*2);ctx.fill();
   ctx.strokeStyle=light;ctx.lineWidth=5;ctx.beginPath();ctx.ellipse(sx,sy+b.r*.3,b.r*1.15,b.r*.92,0,0,Math.PI*2);ctx.stroke();
+  // Зона лечения (полупрозрачный круг)
+  ctx.strokeStyle=light;ctx.lineWidth=2;ctx.globalAlpha=0.35;
+  ctx.setLineDash([12,10]);
+  ctx.beginPath();ctx.ellipse(sx,sy+b.r*.3,b.r*1.8,b.r*1.4,0,0,Math.PI*2);ctx.stroke();
+  ctx.setLineDash([]);ctx.globalAlpha=1;
   const coreG=ctx.createRadialGradient(sx-10,sy-15,0,sx,sy,b.r*.7);
   coreG.addColorStop(0,light);coreG.addColorStop(1,main);
   ctx.fillStyle=coreG;ctx.beginPath();ctx.arc(sx,sy,b.r*.7,0,Math.PI*2);ctx.fill();
@@ -1674,23 +1730,12 @@ function drawBase3D(b,camera,myTeam){
     ctx.fillRect(sx-barW/2+barW*ratio,by,dmgW,barH);
     ctx.strokeStyle='rgba(255,200,100,'+alpha+')';ctx.lineWidth=2;
     ctx.strokeRect(sx-barW/2+barW*ratio,by,dmgW,barH);
-    ctx.fillStyle='rgba(255,220,150,'+alpha+')';
-    ctx.font='bold 14px Arial';ctx.textAlign='center';
-    ctx.strokeStyle='#000';ctx.lineWidth=3;
-    const dmgText='−'+Math.round(b.recentDamage);
-    ctx.strokeText(dmgText,sx+barW/2+dmgW/2+20,by+barH-4);
-    ctx.fillText(dmgText,sx+barW/2+dmgW/2+20,by+barH-4);
   }
   ctx.font='bold 14px Arial';ctx.textAlign='center';
   ctx.strokeStyle='#000';ctx.lineWidth=4;
   const label=isBlue?'БАЗА СИНИХ':'БАЗА КРАСНЫХ';
   ctx.strokeText(label,sx,by-12);
   ctx.fillStyle=isBlue?'#8fd8ff':'#ff8a8a';ctx.fillText(label,sx,by-12);
-  ctx.font='bold 11px Arial';ctx.textAlign='right';
-  ctx.strokeStyle='#000';ctx.lineWidth=3;
-  const hpText=Math.max(0,Math.ceil(b.hp))+'/'+b.hpMax;
-  ctx.strokeText(hpText,sx+barW/2,by+barH+14);
-  ctx.fillStyle='#fff';ctx.fillText(hpText,sx+barW/2,by+barH+14);
   if(b.hurtFlash>0){ctx.globalAlpha=b.hurtFlash*3;ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(sx,sy,b.r*1.3,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1}
 }
 
@@ -2144,7 +2189,7 @@ function mainLoop(now){
       host.broadcastTimer-=dt;
       if(host.broadcastTimer<=0){hostBroadcastState();host.broadcastTimer=1/30}
       if(document.getElementById('shopModal').style.display==='block'&&Math.random()<.03)renderShop();
-      const state={players:Object.values(host.gameState.players).map(p=>({id:p.id,team:p.team,heroId:p.heroId,x:p.x,y:p.y,r:p.r,dir:p.dir,walking:p.walking,hp:p.hp,hpMax:p.hpMax,mp:p.mp,mpMax:p.mpMax,level:p.level,kills:p.kills,dead:p.dead,shards:p.shards||0,inventory:p.inventory||[],respawnTimer:p.respawnTimer,abil:p.abil,attackAnim:p.attackAnim,hurtFlash:p.hurtFlash,castAnim:p.castAnim,shield:p.shield,shieldTimer:p.shieldTimer,evadeTimer:p.evadeTimer})),units:host.gameState.units,bullets:host.gameState.bullets,effects:host.gameState.effects,beams:host.gameState.beams,shardDrops:host.gameState.shardDrops,floatTexts:host.gameState.floatTexts,couriers:host.gameState.couriers,bases:host.gameState.bases,trees:host.gameState.trees,decorations:host.gameState.decorations};
+      const state={players:Object.values(host.gameState.players).map(p=>({id:p.id,team:p.team,heroId:p.heroId,x:p.x,y:p.y,r:p.r,dir:p.dir,walking:p.walking,hp:p.hp,hpMax:p.hpMax,mp:p.mp,mpMax:p.mpMax,level:p.level,kills:p.kills,dead:p.dead,shards:p.shards||0,inventory:p.inventory||[],respawnTimer:p.respawnTimer,abil:p.abil,attackAnim:p.attackAnim,hurtFlash:p.hurtFlash,castAnim:p.castAnim,shield:p.shield,shieldTimer:p.shieldTimer,evadeTimer:p.evadeTimer,atBase:p.atBase})),units:host.gameState.units,bullets:host.gameState.bullets,effects:host.gameState.effects,beams:host.gameState.beams,shardDrops:host.gameState.shardDrops,floatTexts:host.gameState.floatTexts,couriers:host.gameState.couriers,bases:host.gameState.bases,trees:host.gameState.trees,decorations:host.gameState.decorations};
       renderState(state,myId,myTeam);updateUI(state,myId);drawMinimap(state,myId);
     } else if(!isHost&&remoteState){
       sendInput();renderState(remoteState,myId,myTeam);updateUI(remoteState,myId);drawMinimap(remoteState,myId);
