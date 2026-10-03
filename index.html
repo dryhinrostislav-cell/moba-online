@@ -231,6 +231,20 @@ let myHeroId=null;
 const statusEl=document.getElementById('status');
 const host={gameState:null,trees:[],decorations:[],broadcastTimer:0};
 
+// === Клиентская интерполяция для плавности ===
+const _smooth={};
+let _lastDt=0.016;
+function smoothPos(id,tx,ty,dt){
+  if(!id)return {x:tx,y:ty};
+  let s=_smooth[id];
+  if(!s){ s=_smooth[id]={x:tx,y:ty}; return s; }
+  const k=1-Math.exp(-22*dt);
+  s.x+=(tx-s.x)*k;
+  s.y+=(ty-s.y)*k;
+  return s;
+}
+function smoothReset(){ for(const k in _smooth)delete _smooth[k]; }
+
 function mulberry32(a){return function(){let t=a+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
 function distSeg(px,py,a,b){const dx=b.x-a.x,dy=b.y-a.y,l2=dx*dx+dy*dy;let t=l2?((px-a.x)*dx+(py-a.y)*dy)/l2:0;t=Math.max(0,Math.min(1,t));return Math.hypot(px-(a.x+t*dx),py-(a.y+t*dy))}
 function inRiver(x,y){return distSeg(x,y,{x:600,y:600},{x:3000,y:3000})<220}
@@ -304,7 +318,7 @@ function emitEvent(text,color){
   }
 }
 
-// === НОВОЕ: событие о падении башни. Каждой команде — свой текст. ===
+// === Событие о падении башни: каждой команде свой текст ===
 function emitTowerDown(team){
   const isMine = (myTeam===team);
   const text = isMine ? '🏰 ВАША башня уничтожена!' : '🏰 Башня противника уничтожена!';
@@ -367,7 +381,6 @@ function hostTick(dt){
     if(u.type==='tower')u.towerAnim=(u.towerAnim||0)+dt;
     updateUnit(u,dt,gs);
   }
-  // === ИСПРАВЛЕНО: определяем команду разрушенной башни и рассылаем правильный текст ===
   for(const u of gs.units){
     if(u.type==='tower' && u.hp<=0 && !u.notifiedDown){
       u.notifiedDown=true;
@@ -481,6 +494,12 @@ function hostTick(dt){
     if(bm.t<=0){gs.beams.splice(i,1);continue}
   }
   for(let i=gs.effects.length-1;i>=0;i--){const e=gs.effects[i];e.t-=dt;e.r=e.maxR*(1-Math.max(0,e.t)/e.maxT);if(e.t<=0)gs.effects.splice(i,1)}
+
+  // === ОПТИМИЗАЦИЯ: ограничиваем массивы, чтобы не спамить клиента ===
+  if(gs.effects.length>90)gs.effects.splice(0,gs.effects.length-90);
+  if(gs.bullets.length>140)gs.bullets.splice(0,gs.bullets.length-140);
+  if(gs.floatTexts.length>40)gs.floatTexts.splice(0,gs.floatTexts.length-40);
+  if(gs.shardDrops.length>60)gs.shardDrops.splice(0,gs.shardDrops.length-60);
 }
 
 function findById(gs,id){if(!id)return null;if(gs.players[id])return gs.players[id];if(id==='base_blue')return gs.bases.blue;if(id==='base_red')return gs.bases.red;return gs.units.find(u=>u.id===id)||null}
@@ -711,7 +730,7 @@ function hostCast(p,key){
   }
 }
 
-// === ПЕРЕПИСАНО: 3 крипа в линию (перпендикулярный слот-офсет + продольный сдвиг) ===
+// === Крипы в линию: перпендикулярный слот-офсет + продольный сдвиг ===
 const SLOT_OFFSET=40;
 function spawnWave(gs){
   if(gs.units.filter(u=>u.type==='minion').length>70)return;
@@ -725,7 +744,7 @@ function spawnWave(gs){
     const perpB=bAng+Math.PI/2, perpR=rAng+Math.PI/2;
     const bR=blueBase.r+18, rR=redBase.r+18;
     for(let i=0;i<3;i++){
-      const slot=i-1; // -1, 0, 1
+      const slot=i-1;
       const offB=slot*SLOT_OFFSET, offR=slot*SLOT_OFFSET;
       const longB=slot*22, longR=slot*22;
       const bx=blueBase.x+Math.cos(bAng)*(bR+longB)+Math.cos(perpB)*offB;
@@ -765,7 +784,6 @@ function updateUnit(u,dt,gs){
       else{const dx=eb.x-u.x,dy=eb.y-u.y,dd=Math.hypot(dx,dy)||1;u.x+=dx/dd*u.speed*dt;u.y+=dy/dd*u.speed*dt;u.dir=Math.atan2(dy,dx);u.walking=true}
       return;
     }
-    // === ИСПРАВЛЕНО: целимся в точку вейпоинта + перпендикулярный слот-офсет ===
     const w=lane[wp];
     const nextIdx=wp+dirSign;
     const nxt=(nextIdx>=0&&nextIdx<lane.length)?lane[nextIdx]:w;
@@ -799,19 +817,29 @@ function updateUnit(u,dt,gs){
 }
 
 function hostBroadcast(data){if(clientConn&&clientConn.open){try{clientConn.send(JSON.stringify(data))}catch(e){}}}
-// === ОПТИМИЗАЦИЯ: НЕ шлём trees/decorations каждый тик + округляем числа ===
+// === ОПТИМИЗАЦИЯ: фильтр по вьюпорту клиента + округление чисел ===
 function hostBroadcastState(){
   const gs=host.gameState;if(!gs)return;
+  let cx=null,cy=null;
+  if(clientConn && clientConn.peer && gs.players[clientConn.peer]){
+    cx=gs.players[clientConn.peer].x; cy=gs.players[clientConn.peer].y;
+  }
+  const MW=Math.max(W,H)*0.85, MR=MW*1.15;
+  const _inR=(x,y,r)=>{
+    if(cx===null)return true;
+    const dx=x-cx, dy=y-cy, rr=MR+(r||0);
+    return dx*dx+dy*dy < rr*rr;
+  };
   try{
     hostBroadcast({type:'state',
       players:Object.values(gs.players).map(p=>({id:p.id,team:p.team,heroId:p.heroId,x:Math.round(p.x),y:Math.round(p.y),r:p.r,dir:+p.dir.toFixed(2),walking:p.walking,hp:Math.round(p.hp),hpMax:p.hpMax,mp:Math.round(p.mp),mpMax:p.mpMax,level:p.level,kills:p.kills,dead:p.dead,shards:p.shards||0,inventory:p.inventory||[],respawnTimer:+p.respawnTimer.toFixed(1),attackAnim:+p.attackAnim.toFixed(2),hurtFlash:+p.hurtFlash.toFixed(2),castAnim:+p.castAnim.toFixed(2),shield:Math.round(p.shield),shieldTimer:+p.shieldTimer.toFixed(1),evadeTimer:+p.evadeTimer.toFixed(1),atBase:p.atBase,abil:{Q:{cd:+p.abil.Q.cd.toFixed(1),level:p.abil.Q.level,unlocked:p.abil.Q.unlocked},W:{cd:+p.abil.W.cd.toFixed(1),level:p.abil.W.level,unlocked:p.abil.W.unlocked},E:{cd:+p.abil.E.cd.toFixed(1),level:p.abil.E.level,unlocked:p.abil.E.unlocked},R:{cd:+p.abil.R.cd.toFixed(1),level:p.abil.R.level,unlocked:p.abil.R.unlocked}}})),
-      units:gs.units.map(u=>({id:u.id,type:u.type,team:u.team,x:Math.round(u.x),y:Math.round(u.y),r:u.r,dir:+(u.dir||0).toFixed(2),walking:u.walking,hp:Math.round(u.hp),hpMax:u.hpMax,big:!!u.big,terror:!!u.terror,attackAnim:+(u.attackAnim||0).toFixed(2),hurtFlash:+(u.hurtFlash||0).toFixed(2),deathAnim:+(u.deathAnim||0).toFixed(2),towerAnim:+(u.towerAnim||0).toFixed(1)})),
-      bullets:gs.bullets.map(b=>({x:Math.round(b.x),y:Math.round(b.y),color:b.color,type:b.type||'bullet',dir:+(b.dir||0).toFixed(2),hero:b.hero||''})),
-      beams:(gs.beams||[]).map(bm=>({x1:Math.round(bm.x1),y1:Math.round(bm.y1),x2:Math.round(bm.x2),y2:Math.round(bm.y2),color:bm.color,t:+bm.t.toFixed(2),maxT:bm.maxT,width:bm.width})),
-      effects:gs.effects.map(e=>({x:Math.round(e.x),y:Math.round(e.y),r:Math.round(e.r),color:e.color,t:+e.t.toFixed(2),maxT:e.maxT})),
-      shardDrops:gs.shardDrops.map(d=>({x:Math.round(d.x),y:Math.round(d.y),t:+d.t.toFixed(2)})),
-      floatTexts:gs.floatTexts.map(f=>({x:Math.round(f.x),y:Math.round(f.y),text:f.text,color:f.color,t:+f.t.toFixed(2),maxT:f.maxT})),
-      couriers:gs.couriers.map(c=>({x:Math.round(c.x),y:Math.round(c.y),dir:+(c.dir||0).toFixed(2),walking:c.walking})),
+      units:gs.units.filter(u=>u.type==='tower'||u.type==='terror'||_inR(u.x,u.y,u.r)).map(u=>({id:u.id,type:u.type,team:u.team,x:Math.round(u.x),y:Math.round(u.y),r:u.r,dir:+(u.dir||0).toFixed(2),walking:u.walking,hp:Math.round(u.hp),hpMax:u.hpMax,big:!!u.big,terror:!!u.terror,attackAnim:+(u.attackAnim||0).toFixed(2),hurtFlash:+(u.hurtFlash||0).toFixed(2),deathAnim:+(u.deathAnim||0).toFixed(2),towerAnim:+(u.towerAnim||0).toFixed(1)})),
+      bullets:gs.bullets.filter(b=>_inR(b.x,b.y,60)).map(b=>({x:Math.round(b.x),y:Math.round(b.y),color:b.color,type:b.type||'bullet',dir:+(b.dir||0).toFixed(2),hero:b.hero||''})),
+      beams:(gs.beams||[]).filter(bm=>_inR(bm.x1,bm.y1,100)||_inR(bm.x2,bm.y2,100)).map(bm=>({x1:Math.round(bm.x1),y1:Math.round(bm.y1),x2:Math.round(bm.x2),y2:Math.round(bm.y2),color:bm.color,t:+bm.t.toFixed(2),maxT:bm.maxT,width:bm.width})),
+      effects:gs.effects.filter(e=>_inR(e.x,e.y,e.maxR||40)).map(e=>({x:Math.round(e.x),y:Math.round(e.y),r:Math.round(e.r),color:e.color,t:+e.t.toFixed(2),maxT:e.maxT})),
+      shardDrops:gs.shardDrops.filter(d=>_inR(d.x,d.y,40)).map(d=>({x:Math.round(d.x),y:Math.round(d.y),t:+d.t.toFixed(2)})),
+      floatTexts:gs.floatTexts.filter(f=>_inR(f.x,f.y,40)).map(f=>({x:Math.round(f.x),y:Math.round(f.y),text:f.text,color:f.color,t:+f.t.toFixed(2),maxT:f.maxT})),
+      couriers:gs.couriers.filter(c=>_inR(c.x,c.y,60)).map(c=>({x:Math.round(c.x),y:Math.round(c.y),dir:+(c.dir||0).toFixed(2),walking:c.walking})),
       bases:{
         blue:{x:gs.bases.blue.x,y:gs.bases.blue.y,r:gs.bases.blue.r,hp:Math.round(gs.bases.blue.hp),hpMax:gs.bases.blue.hpMax,team:'blue',recentDamage:Math.round(gs.bases.blue.recentDamage||0),recentTimer:+(gs.bases.blue.recentTimer||0).toFixed(2),hurtFlash:+(gs.bases.blue.hurtFlash||0).toFixed(2)},
         red:{x:gs.bases.red.x,y:gs.bases.red.y,r:gs.bases.red.r,hp:Math.round(gs.bases.red.hp),hpMax:gs.bases.red.hpMax,team:'red',recentDamage:Math.round(gs.bases.red.recentDamage||0),recentTimer:+(gs.bases.red.recentTimer||0).toFixed(2),hurtFlash:+(gs.bases.red.hurtFlash||0).toFixed(2)}
@@ -972,7 +1000,6 @@ bindTap('btnCreate',()=>{statusEl.textContent='Создаю комнату...';s
 function addConn(conn){
   const open=()=>{
     if(!host.gameState.players[conn.peer])host.gameState.players[conn.peer]=createPlayer(conn.peer,'red','tinker');
-    // === ОПТИМИЗАЦИЯ: статику (деревья/декор) шлём один раз в welcome ===
     conn.send(JSON.stringify({type:'welcome',yourId:conn.peer,team:'red',trees:host.gameState.trees,decorations:host.gameState.decorations}));
     showMsg('🔗 Игрок подключился!','#4f4',2000);
   };
@@ -1039,7 +1066,6 @@ bindTap('btnJoin',()=>{
             }
             else if(m.type==='gameover'){showMsg(m.winner===myTeam?'🏆 Победа!':'💀 Поражение',m.winner===myTeam?'#4f4':'#f44',0);}
             else if(m.type==='event'){showEvent(m.text,m.color);}
-            // === НОВОЕ: обработка события падения башни ===
             else if(m.type==='event_tower'){
               const isMine=(myTeam===m.team);
               showEvent(isMine?'🏰 ВАША башня уничтожена!':'🏰 Башня противника уничтожена!', isMine?'#f66':'#4f4');
@@ -1099,8 +1125,10 @@ function drawShadow3D(x,y,rx,ry,a){
   const alpha=(typeof a==='number'&&!isNaN(a))?a:.5;
   ctx.fillStyle='rgba(0,0,0,'+(alpha*0.65)+')';
   ctx.beginPath();ctx.ellipse(x+rx*0.15,y+ry*0.4,rx*1.2,ry*1.0,0,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle='rgba(0,0,0,'+(alpha*0.25)+')';
-  ctx.beginPath();ctx.ellipse(x+rx*0.35,y+ry*0.55,rx*1.6,ry*1.35,0,0,Math.PI*2);ctx.fill();
+  if(isHost){
+    ctx.fillStyle='rgba(0,0,0,'+(alpha*0.25)+')';
+    ctx.beginPath();ctx.ellipse(x+rx*0.35,y+ry*0.55,rx*1.6,ry*1.35,0,0,Math.PI*2);ctx.fill();
+  }
 }
 function drawShadow(x,y,rx,ry,a){drawShadow3D(x,y,rx,ry,a);}
 
@@ -1507,8 +1535,10 @@ function drawHero(sx,sy,u,myTeam){
   }
   ctx.strokeStyle='rgba('+auraCol+',0.9)';ctx.lineWidth=3.5;
   ctx.beginPath();ctx.ellipse(sx,sy+u.r*1.15,u.r*1.7*pulse,u.r*0.55*pulse,0,0,Math.PI*2);ctx.stroke();
-  ctx.strokeStyle='rgba('+auraCol+',0.35)';ctx.lineWidth=6;
-  ctx.beginPath();ctx.ellipse(sx,sy+u.r*1.15,u.r*2.0*pulse,u.r*0.7*pulse,0,0,Math.PI*2);ctx.stroke();
+  if(isHost){
+    ctx.strokeStyle='rgba('+auraCol+',0.35)';ctx.lineWidth=6;
+    ctx.beginPath();ctx.ellipse(sx,sy+u.r*1.15,u.r*2.0*pulse,u.r*0.7*pulse,0,0,Math.PI*2);ctx.stroke();
+  }
   const grad=ctx.createRadialGradient(sx,sy+u.r*0.9,u.r*0.3,sx,sy+u.r*0.9,u.r*1.9);
   grad.addColorStop(0,'rgba('+auraCol+',0.28)');grad.addColorStop(1,'rgba('+auraCol+',0)');
   ctx.fillStyle=grad;
@@ -1947,8 +1977,10 @@ function drawGround3D(camera,trees,decorations){
   ctx.fillStyle=getBgGrad();ctx.fillRect(0,0,W,H);
   ctx.strokeStyle='rgba(50,105,45,.6)';ctx.lineWidth=1;
   ctx.beginPath();
-  for(let i=0;i<GRASS_CACHE.length;i++){
-    const g=GRASS_CACHE[i];
+  const stride = isHost ? 1 : 2;
+  const gc=GRASS_CACHE, glen=gc.length;
+  for(let i=0;i<glen;i+=stride){
+    const g=gc[i];
     const px=g.x-camera.x,py=g.y-camera.y;
     if(px<-5||py<-5||px>W+5||py>H+5)continue;
     ctx.moveTo(px,py);ctx.lineTo(px+g.dx,py+g.dy);
@@ -2013,11 +2045,15 @@ function drawGround3D(camera,trees,decorations){
   for(const t of trees)drawTree3D(t,camera);
 }
 
-function renderState(state,myId,myTeam){
+function renderState(state,myId,myTeam,dt){
   const me=state.players.find(p=>p.id===myId);if(!me)return;
   const myT=myTeam||me.team;
   const now=performance.now()*.001;
-  const camera={x:Math.max(0,Math.min(WORLD.w-W,me.x-W/2)),y:Math.max(0,Math.min(WORLD.h-H,me.y-H/2)),_t:now};
+  const useSmooth = !isHost;
+  _lastDt = dt || 0.016;
+  let camX=me.x, camY=me.y;
+  if(useSmooth){ const sp=smoothPos(me.id,me.x,me.y,_lastDt); camX=sp.x; camY=sp.y; }
+  const camera={x:Math.max(0,Math.min(WORLD.w-W,camX-W/2)),y:Math.max(0,Math.min(WORLD.h-H,camY-H/2)),_t:now};
   drawGround3D(camera,state.trees,state.decorations||[]);
   for(const d of (state.decorations||[]))if(d.type==='log'||d.type==='ruin'||d.type==='bush')drawDeco3D(d,camera);
   drawBase3D(state.bases.blue,camera,myT);
@@ -2048,7 +2084,12 @@ function renderState(state,myId,myTeam){
   all.sort((a,b)=>a.obj.y-b.obj.y);
   for(const it of all){
     const u=it.obj;u._t=now;
-    const sx=u.x-camera.x,sy=u.y-camera.y;
+    let rx=u.x, ry=u.y;
+    if(useSmooth){
+      const sp=smoothPos(u.id,u.x,u.y,_lastDt);
+      rx=sp.x; ry=sp.y;
+    }
+    const sx=rx-camera.x,sy=ry-camera.y;
     if(sx<-150||sy<-150||sx>W+150||sy>H+150)continue;
     if(u.type==='tower'){drawTower3D(u,camera,myT);continue}
     if(u.type==='terror'){drawTerrorStructure(sx,sy,u,myT);drawHpBar3D(u,sx,sy,false,myT);continue}
@@ -2057,7 +2098,9 @@ function renderState(state,myId,myTeam){
       drawTreant3D(sx,sy,u,myT,pal);drawHpBar3D(u,sx,sy,false,myT);continue;
     }
     if(it.isPlayer){
-      drawHero(sx,sy,u,myT);
+      const u2 = useSmooth ? Object.assign({},u,{x:rx,y:ry}) : u;
+      u2._t=now;
+      drawHero(sx,sy,u2,myT);
       drawHpBar3D(u,sx,sy,u.id===myId,myT);
     } else {
       drawChar3D(sx,sy,u,{body:'#5a2a10',bodyLight:'#a05a20',bodyDark:'#2a0a04',weapon:u.big?'club':'claw',head:'#d09060',headLight:'#f0c090',headDark:'#5a3a20'},myT);
@@ -2214,6 +2257,7 @@ function updateUI(state,myId){
     rBtn.style.boxShadow='none';
     rBtn.style.borderColor='#fff';
   }
+  if(me.dead && _smooth[me.id]){ delete _smooth[me.id]; }
   const respEl=document.getElementById('respawn');
   if(me.dead){respEl.style.display='flex';respEl.textContent='💀 ВЫ МЕРТВЫ\nРеспавн: '+Math.ceil(me.respawnTimer)+'с';respEl.style.whiteSpace='pre'}
   else respEl.style.display='none';
@@ -2240,13 +2284,13 @@ function mainLoop(now){
     if(isHost&&host.gameState){
       sendInput();hostTick(dt);
       host.broadcastTimer-=dt;
-      // === ОПТИМИЗАЦИЯ: 15 Гц вместо 30 ===
-      if(host.broadcastTimer<=0){hostBroadcastState();host.broadcastTimer=1/15}
+      // 12 Гц для клиента + фильтр по вьюпорту
+      if(host.broadcastTimer<=0){hostBroadcastState();host.broadcastTimer=1/12}
       if(document.getElementById('shopModal').style.display==='block'&&Math.random()<.03)renderShop();
       const state={players:Object.values(host.gameState.players).map(p=>({id:p.id,team:p.team,heroId:p.heroId,x:p.x,y:p.y,r:p.r,dir:p.dir,walking:p.walking,hp:p.hp,hpMax:p.hpMax,mp:p.mp,mpMax:p.mpMax,level:p.level,kills:p.kills,dead:p.dead,shards:p.shards||0,inventory:p.inventory||[],respawnTimer:p.respawnTimer,abil:p.abil,attackAnim:p.attackAnim,hurtFlash:p.hurtFlash,castAnim:p.castAnim,shield:p.shield,shieldTimer:p.shieldTimer,evadeTimer:p.evadeTimer,atBase:p.atBase})),units:host.gameState.units,bullets:host.gameState.bullets,effects:host.gameState.effects,beams:host.gameState.beams,shardDrops:host.gameState.shardDrops,floatTexts:host.gameState.floatTexts,couriers:host.gameState.couriers,bases:host.gameState.bases,trees:host.gameState.trees,decorations:host.gameState.decorations};
-      renderState(state,myId,myTeam);updateUI(state,myId);drawMinimap(state,myId);
+      renderState(state,myId,myTeam,dt);updateUI(state,myId);drawMinimap(state,myId);
     } else if(!isHost&&remoteState){
-      sendInput();renderState(remoteState,myId,myTeam);updateUI(remoteState,myId);drawMinimap(remoteState,myId);
+      sendInput();renderState(remoteState,myId,myTeam,dt);updateUI(remoteState,myId);drawMinimap(remoteState,myId);
     }
   }catch(e){console.error('Game error:',e);if(!errorShown){errorShown=true;showMsg('Ошибка: '+e.message,'#f44',5000)}}
   requestAnimationFrame(mainLoop);
